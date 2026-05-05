@@ -1,131 +1,111 @@
 <!doctype html>
 <html>
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Quantum Chip VR - Safe Mode</title>
-<style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#05070a;color:white;font-family:system-ui,Arial}
-  #ui{position:fixed;left:10px;top:10px;z-index:10;display:flex;gap:8px;flex-wrap:wrap}
-  button{font-weight:800;border:0;border-radius:12px;padding:12px 16px;font-size:15px}
-  #cardboard{background:#48f0aa;color:#001b12}
-  #motion{background:#ffe066;color:#171000}
-  #status{position:fixed;right:10px;top:10px;background:rgba(0,0,0,.7);padding:10px 12px;border-radius:10px;z-index:10;font-size:13px;max-width:45vw}
-  #hud{position:fixed;left:10px;bottom:10px;background:rgba(0,0,0,.68);padding:12px;border-radius:12px;z-index:10;font-size:13px;line-height:1.35;max-width:370px}
-  canvas{display:block}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Quantum Chip Photon VR</title>
+  <style>
+    html,body{margin:0;overflow:hidden;background:#030609;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
+    #ui{position:fixed;left:10px;top:10px;z-index:10;display:flex;gap:8px;flex-wrap:wrap;max-width:92vw}
+    button{border:0;border-radius:12px;padding:12px 14px;font-weight:800;font-size:14px;background:#59ffc0;color:#02110c;box-shadow:0 0 18px rgba(89,255,192,.35)}
+    button.secondary{background:#ffe16b;color:#100d00} button.dark{background:#dde8ff;color:#06101f}
+    #hud{position:fixed;left:10px;bottom:10px;z-index:10;background:rgba(0,0,0,.62);padding:12px 14px;border-radius:12px;line-height:1.35;min-width:270px;font-size:13px}
+    #status{position:fixed;right:10px;top:10px;z-index:10;background:rgba(0,0,0,.62);padding:10px 12px;border-radius:10px;font-size:13px}
+    #center{position:fixed;left:50%;top:50%;width:10px;height:10px;margin-left:-5px;margin-top:-5px;border:1px solid rgba(255,255,255,.7);border-radius:50%;z-index:9;pointer-events:none}
+    canvas{display:block}
+  </style>
 </head>
 <body>
-<div id="ui"><button id="cardboard">ENTER CARDBOARD</button><button id="motion">ENABLE PHONE MOTION</button></div>
-<div id="status">Safe mode: starting...</div>
-<div id="hud"><b>Flying photon prototype - SAFE MODE</b><br>Procedural chip only. No heavy GDS load, so it should start immediately.<br><span id="readout">pos -- speed --</span></div>
-<script type="module">
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-
-const statusEl=document.getElementById('status'), readout=document.getElementById('readout');
-let scene,camera,renderer,clock,rig,chipGroup;
-let motionEnabled=false, stereo=false;
-let alpha=0,beta=0,gamma=0, smoothQ=new THREE.Quaternion();
-const pos=new THREE.Vector3(0, -900, 900); // microns, z=height above chip
-const forward=new THREE.Vector3();
-const maxZ=10000, minZ=5, chipHalf=2500;
-
-function setStatus(s){ statusEl.textContent=s; }
-function umToScene(v){ return v/500; } // 500 um = 1 scene unit
-
-init(); animate();
-
-function init(){
-  scene=new THREE.Scene(); scene.background=new THREE.Color(0x05070a);
-  camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.001, 2000);
-  rig=new THREE.Group(); rig.add(camera); scene.add(rig);
-  clock=new THREE.Clock();
-  renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
-  scene.add(new THREE.AmbientLight(0xffffff,0.85));
-  const dl=new THREE.DirectionalLight(0xffffff,1.2); dl.position.set(3,4,6); scene.add(dl);
-  buildProceduralChip();
-  addStars();
-  setStatus('Ready. Tap ENABLE PHONE MOTION, then ENTER CARDBOARD.');
-  addEvents();
-}
-
-function buildProceduralChip(){
-  chipGroup=new THREE.Group(); scene.add(chipGroup);
-  const siMat=new THREE.MeshStandardMaterial({color:0x171a22,roughness:.75,metalness:0});
-  const nbMat=new THREE.MeshStandardMaterial({color:0xa8b7c7,roughness:.24,metalness:.75});
-  const etchMat=new THREE.MeshStandardMaterial({color:0x020306,roughness:.9,metalness:0});
-  const dielMat=new THREE.MeshStandardMaterial({color:0x6ddcff,transparent:true,opacity:.42,roughness:.18,metalness:0});
-  const lineMat=new THREE.MeshStandardMaterial({color:0xdfe8f0,roughness:.18,metalness:.85});
-  function box(x,y,z,w,h,d,mat){
-    const m=new THREE.Mesh(new THREE.BoxGeometry(umToScene(w),umToScene(h),umToScene(d)),mat);
-    m.position.set(umToScene(x),umToScene(y),umToScene(z)); chipGroup.add(m); return m;
-  }
-  box(0,0,-250,5000,5000,500,siMat);        // 500 um Si
-  box(0,0,0.1,5000,5000,0.2,nbMat);         // 200 nm Nb sheet
-  // Etched openings layer 134, drawn as dark grooves slightly above surface
-  for(let i=-4;i<=4;i++) box(i*520,0,0.8,80,4300,1.5,etchMat);
-  for(let i=-3;i<=3;i++) box(0,i*650,0.9,4300,65,1.5,etchMat);
-  // resonator / feedline style features layers 136/137
-  box(0,-1100,1.2,3900,80,0.13,lineMat); box(0,1100,1.2,3900,80,0.13,lineMat);
-  for(let i=-3;i<=3;i++){
-    box(i*500,-600,1.25,220,60,0.13,lineMat); box(i*500,-360,1.25,60,520,0.13,lineMat); box(i*500,-100,1.25,220,60,0.13,lineMat);
-    const jj=box(i*500,300,1.4,65,65,0.4,new THREE.MeshStandardMaterial({color:0xffd36d,roughness:.25,metalness:.6}));
-  }
-  // crossover dielectric bridge-like slabs, layers 146/147
-  for(let i=-2;i<=2;i++){
-    box(i*700,0,18,110,900,36,dielMat);
-    box(i*700,0,38,160,180,0.13,lineMat);
-  }
-  // chip edge frame
-  const edgeMat=new THREE.LineBasicMaterial({color:0x48f0aa});
-  const pts=[[-2500,-2500,2],[2500,-2500,2],[2500,2500,2],[-2500,2500,2],[-2500,-2500,2]].map(p=>new THREE.Vector3(umToScene(p[0]),umToScene(p[1]),umToScene(p[2])));
-  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),edgeMat); chipGroup.add(line);
-}
-function addStars(){
-  const g=new THREE.BufferGeometry(), arr=[]; for(let i=0;i<400;i++){arr.push((Math.random()-.5)*60,(Math.random()-.5)*60,Math.random()*35+5)}
-  g.setAttribute('position',new THREE.Float32BufferAttribute(arr,3)); scene.add(new THREE.Points(g,new THREE.PointsMaterial({size:.03,color:0x99aaff})));
-}
-function addEvents(){
-  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);});
-  document.getElementById('motion').onclick=async()=>{
-    try{
-      if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
-        const p=await DeviceOrientationEvent.requestPermission(); if(p!=='granted'){setStatus('Motion permission denied.');return;}
+  <div id="ui">
+    <button id="startBtn">START FLYING</button>
+    <button class="secondary" id="motionBtn">ENABLE PHONE MOTION</button>
+    <button class="dark" id="cardboardBtn">CARDBOARD SPLIT: OFF</button>
+    <button class="dark" id="resetBtn">RESET</button>
+  </div>
+  <div id="status">Loading real GDS texture...</div>
+  <div id="hud">Position: —<br>Velocity: —<br>Mode: single screen</div>
+  <div id="center"></div>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="chip-data.js"></script>
+  <script>
+  (()=>{
+    const status=document.getElementById('status'), hud=document.getElementById('hud');
+    let running=false, cardboard=false, motion=false;
+    let yaw=0, pitch=-0.45, targetYaw=0, targetPitch=-0.45, lastT=performance.now();
+    let initialOri=null, currentOri=null;
+    const data=window.CHIP_DATA || {bbox:[0,0,10000,10000],layers:{}};
+    const bbox=data.bbox || [0,0,10000,10000];
+    const chipUm={w:bbox[2]-bbox[0], h:bbox[3]-bbox[1]};
+    const UM_PER_UNIT=1000; // Three.js world unit = 1000 microns
+    const chipW=chipUm.w/UM_PER_UNIT, chipH=chipUm.h/UM_PER_UNIT;
+    const maxZ=10000, minZ=5;
+    const state={x:chipUm.w/2, y:chipUm.h/2, z:1500};
+    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x030609);
+    const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.002, 80);
+    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
+    scene.add(new THREE.HemisphereLight(0xffffff,0x445566,1.25));
+    const dirLight=new THREE.DirectionalLight(0xffffff,1.2); dirLight.position.set(2,5,3); scene.add(dirLight);
+    const baseGeo=new THREE.BoxGeometry(chipW,chipH,0.5);
+    const baseMat=new THREE.MeshStandardMaterial({color:0x10151a,roughness:.75,metalness:.05});
+    const base=new THREE.Mesh(baseGeo,baseMat); base.position.set(0,0,-0.255); scene.add(base);
+    function makeTexture(){
+      const S=2048, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
+      g.fillStyle='#161d22'; g.fillRect(0,0,S,S);
+      function map(pt){ return [(pt[0]-bbox[0])/chipUm.w*S, S-(pt[1]-bbox[1])/chipUm.h*S]; }
+      const styles={
+        '134':'rgba(5,8,12,.86)',
+        '136':'rgba(145,215,255,.82)',
+        '137':'rgba(80,170,255,.82)',
+        '146':'rgba(255,220,110,.68)',
+        '147':'rgba(255,140,235,.62)',
+        '131':'rgba(220,240,255,.55)'
+      };
+      const order=['134','131','136','137','146','147'];
+      for(const layer of order){ const polys=data.layers[layer]||[]; g.fillStyle=styles[layer]||'rgba(255,255,255,.6)';
+        g.strokeStyle=layer==='134'?'rgba(0,0,0,.4)':'rgba(255,255,255,.22)'; g.lineWidth=1;
+        for(const p of polys){ if(!p||p.length<3) continue; g.beginPath(); const a=map(p[0]); g.moveTo(a[0],a[1]); for(let i=1;i<p.length;i++){const m=map(p[i]); g.lineTo(m[0],m[1]);} g.closePath(); g.fill(); if(layer!=='134') g.stroke(); }
       }
-      motionEnabled=true; setStatus('Phone motion enabled. Now tap ENTER CARDBOARD.');
-    }catch(e){ setStatus('Motion permission error: '+e.message); }
-  };
-  addEventListener('deviceorientation',e=>{ if(!motionEnabled)return; alpha=e.alpha||0; beta=e.beta||0; gamma=e.gamma||0; }, true);
-  document.getElementById('cardboard').onclick=()=>{ stereo=!stereo; if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{}); setStatus(stereo?'Cardboard split-screen on.':'Cardboard off.'); };
-  // desktop fallback smooth drag
-  let dragging=false,lastX=0,lastY=0,yaw=0,pitch=0;
-  renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
-  addEventListener('pointerup',()=>dragging=false);
-  addEventListener('pointermove',e=>{if(!dragging||motionEnabled)return; yaw-=(e.clientX-lastX)*.004; pitch-=(e.clientY-lastY)*.004; pitch=Math.max(-1.5,Math.min(1.5,pitch)); lastX=e.clientX;lastY=e.clientY; camera.quaternion.setFromEuler(new THREE.Euler(pitch,yaw,0,'YXZ'));});
-}
-function updatePhoneOrientation(){
-  if(!motionEnabled) return;
-  // Approximate phone landscape/Cardboard mapping. Smooth to avoid discrete jumps.
-  const euler=new THREE.Euler(THREE.MathUtils.degToRad(beta-90), THREE.MathUtils.degToRad(alpha), -THREE.MathUtils.degToRad(gamma), 'YXZ');
-  const q=new THREE.Quaternion().setFromEuler(euler);
-  smoothQ.slerp(q,0.12); camera.quaternion.copy(smoothQ);
-}
-function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); updatePhoneOrientation();
-  camera.getWorldDirection(forward); const speed=pos.z/30+3; pos.addScaledVector(forward, speed*dt); pos.x=Math.max(-chipHalf,Math.min(chipHalf,pos.x)); pos.y=Math.max(-chipHalf,Math.min(chipHalf,pos.y)); pos.z=Math.max(minZ,Math.min(maxZ,pos.z));
-  rig.position.set(umToScene(pos.x),umToScene(pos.y),umToScene(pos.z));
-  readout.textContent=`pos x=${pos.x.toFixed(1)} um, y=${pos.y.toFixed(1)} um, height=${pos.z.toFixed(1)} um | speed=${speed.toFixed(2)} um/s`;
-  if(stereo) renderStereo(); else renderer.render(scene,camera);
-}
-function renderStereo(){
-  const w=innerWidth,h=innerHeight; renderer.setScissorTest(true);
-  const sep=0.03; camera.updateMatrixWorld();
-  for(let eye=0; eye<2; eye++){
-    const x=eye*w/2; renderer.setViewport(x,0,w/2,h); renderer.setScissor(x,0,w/2,h);
-    camera.position.x=(eye?sep:-sep); renderer.render(scene,camera);
-  }
-  camera.position.x=0; renderer.setScissorTest(false);
-}
-</script>
+      g.fillStyle='rgba(255,255,255,.75)'; g.font='36px system-ui'; g.fillText('Real GDS layout texture: layers 134, 136, 137, 146, 147',40,70);
+      return new THREE.CanvasTexture(c);
+    }
+    const topMat=new THREE.MeshStandardMaterial({map:makeTexture(),roughness:.5,metalness:.45});
+    const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat); top.position.z=0.003; scene.add(top);
+    const edge=new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({color:0x88aaff,transparent:true,opacity:.35})); edge.position.copy(base.position); scene.add(edge);
+    status.textContent='Ready: real geometry is drawn as a stable texture.';
+    function updateCamera(){
+      yaw += (targetYaw-yaw)*0.12; pitch += (targetPitch-pitch)*0.12; pitch=Math.max(-1.45,Math.min(1.45,pitch));
+      const wx=(state.x-chipUm.w/2)/UM_PER_UNIT, wy=(state.y-chipUm.h/2)/UM_PER_UNIT, wz=state.z/UM_PER_UNIT;
+      camera.position.set(wx,wy,wz);
+      camera.rotation.order='YXZ'; camera.rotation.y=yaw; camera.rotation.x=pitch; camera.rotation.z=0;
+    }
+    function forward(){ return new THREE.Vector3(0,0,-1).applyEuler(camera.rotation).normalize(); }
+    function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
+      if(motion && currentOri && initialOri){
+        let da=(currentOri.alpha-initialOri.alpha)*Math.PI/180; if(da>Math.PI)da-=2*Math.PI; if(da<-Math.PI)da+=2*Math.PI;
+        targetYaw=-da; targetPitch=(currentOri.beta-initialOri.beta)*Math.PI/180 - .45;
+      }
+      updateCamera();
+      if(running){ const v=state.z/30+3; const f=forward(); state.x += f.x*v*dt; state.y += f.y*v*dt; state.z += f.z*v*dt;
+        state.x=Math.max(0,Math.min(chipUm.w,state.x)); state.y=Math.max(0,Math.min(chipUm.h,state.y)); state.z=Math.max(minZ,Math.min(maxZ,state.z)); }
+      const v=state.z/30+3; hud.innerHTML=`Position: x ${state.x.toFixed(1)} µm, y ${state.y.toFixed(1)} µm, z ${state.z.toFixed(1)} µm<br>Velocity: ${v.toFixed(2)} µm/s<br>Mode: ${cardboard?'Cardboard split':'single screen'}${motion?' + phone motion':''}`;
+      if(cardboard){
+        renderer.setScissorTest(true); const w=innerWidth/2,h=innerHeight; camera.aspect=(w/h); camera.updateProjectionMatrix();
+        renderer.setViewport(0,0,w,h); renderer.setScissor(0,0,w,h); renderer.render(scene,camera);
+        renderer.setViewport(w,0,w,h); renderer.setScissor(w,0,w,h); renderer.render(scene,camera); renderer.setScissorTest(false);
+      } else { camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setViewport(0,0,innerWidth,innerHeight); renderer.render(scene,camera); }
+    }
+    requestAnimationFrame(step);
+    let dragging=false,lastX=0,lastY=0;
+    renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
+    addEventListener('pointerup',()=>dragging=false); addEventListener('pointermove',e=>{ if(!dragging||motion) return; targetYaw-=(e.clientX-lastX)*0.005; targetPitch-=(e.clientY-lastY)*0.005; lastX=e.clientX; lastY=e.clientY; });
+    addEventListener('deviceorientation',e=>{ currentOri={alpha:e.alpha||0,beta:e.beta||0,gamma:e.gamma||0}; }, true);
+    document.getElementById('startBtn').onclick=()=>{ running=!running; document.getElementById('startBtn').textContent=running?'PAUSE':'START FLYING'; };
+    document.getElementById('cardboardBtn').onclick=()=>{ cardboard=!cardboard; document.getElementById('cardboardBtn').textContent='CARDBOARD SPLIT: '+(cardboard?'ON':'OFF'); };
+    document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=1500; targetYaw=yaw=0; targetPitch=pitch=-0.45; initialOri=currentOri; };
+    document.getElementById('motionBtn').onclick=async()=>{ try{ if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){ const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted'){status.textContent='Phone motion permission denied.'; return;} } motion=true; initialOri=currentOri||{alpha:0,beta:0,gamma:0}; status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.'; }catch(err){ status.textContent='Motion error: '+err.message; } };
+    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+  })();
+  </script>
 </body>
 </html>
