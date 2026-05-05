@@ -21,12 +21,18 @@
   Desktop: drag to look, WASD optional. Phone: open in Chrome, tap Enter VR/Cardboard.<br>
   <button id="resetBtn">Reset photon</button>
 </div>
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://unpkg.com/three@0.160.0/examples/js/webxr/VRButton.js"></script>
-<script src="chip-data.js"></script>
-<script>
+<script src="./chip-data.js"></script>
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+import { VRButton } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/webxr/VRButton.js";
+window.addEventListener("error", (e) => { document.getElementById("hud").innerHTML = "<b>Load error</b><br>" + e.message; });
+
+const hud0 = document.getElementById("hud");
+hud0.innerHTML = "Loading chip data...";
 const data = window.CHIP_DATA;
+if (!data) throw new Error("chip-data.js did not load. Make sure chip-data.js is in the same folder as index.html and named exactly chip-data.js");
+hud0.innerHTML = "Building 3D chip...";
 const bbox = data.bbox, minX=bbox[0], minY=bbox[1], maxX=bbox[2], maxY=bbox[3];
 const W=maxX-minX, H=maxY-minY, MAX_Z=data.maxHeightUm;
 const scene = new THREE.Scene();
@@ -36,7 +42,7 @@ const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.01, 300
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight); renderer.xr.enabled = true; document.body.appendChild(renderer.domElement);
 document.body.appendChild(VRButton.createButton(renderer));
-const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.target.set(W/2,H/2,0);
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.target.set(W/2,H/2,0);
 scene.add(new THREE.HemisphereLight(0xbfdcff,0x202020,1.9));
 const sun = new THREE.DirectionalLight(0xffffff,1.1); sun.position.set(-5000,-4000,8000); scene.add(sun);
 const mats = {
