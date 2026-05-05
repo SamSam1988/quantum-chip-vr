@@ -16,7 +16,8 @@
     #gauge{position:relative;width:230px;height:56px;margin:4px auto 0;overflow:hidden}
     #arc{position:absolute;left:15px;top:4px;width:200px;height:100px;border:7px solid rgba(221,232,255,.28);border-bottom:0;border-radius:200px 200px 0 0}
     #needle{position:absolute;left:113px;bottom:1px;width:4px;height:52px;background:#59ffc0;border-radius:4px;transform-origin:50% 100%;transform:rotate(-82deg);box-shadow:0 0 12px rgba(89,255,192,.7)}
-    #status{position:fixed;right:10px;top:10px;z-index:10;background:rgba(0,0,0,.62);padding:10px 12px;border-radius:10px;font-size:13px}
+    #status{position:fixed;right:10px;top:10px;z-index:10;background:rgba(0,0,0,.62);padding:10px 12px;border-radius:10px;font-size:13px;transition:opacity .7s ease}
+    #status.hidden{opacity:0;pointer-events:none}
     #center{position:fixed;left:50%;top:50%;width:10px;height:10px;margin-left:-5px;margin-top:-5px;border:1px solid rgba(255,255,255,.7);border-radius:50%;z-index:9;pointer-events:none}
     canvas{display:block}
   </style>
@@ -38,7 +39,7 @@
   (()=>{
     const status=document.getElementById('status'), hud=document.getElementById('hud'), speedValue=document.getElementById('speedValue'), needle=document.getElementById('needle');
     let running=false, cardboard=false, motion=false;
-    let yaw=0, pitch=-0.45, targetYaw=0, targetPitch=-0.45, lastT=performance.now();
+    let yaw=0, pitch=-0.35, targetYaw=0, targetPitch=-0.35, lastT=performance.now();
     let initialOri=null, currentOri=null;
     const data=window.CHIP_DATA || {bbox:[0,0,10000,10000],layers:{}};
     const bbox=data.bbox || [0,0,10000,10000];
@@ -46,16 +47,22 @@
     const UM_PER_UNIT=1000; // Three.js world unit = 1000 microns
     const chipW=chipUm.w/UM_PER_UNIT, chipH=chipUm.h/UM_PER_UNIT;
     const maxZ=10000, minZ=0;
-    const state={x:chipUm.w/2, y:chipUm.h/2, z:1500};
+    const state={x:chipUm.w/2, y:chipUm.h/2, z:2200}; // start clearly above the surface
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x030609);
     const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.002, 80);
     const renderer=new THREE.WebGLRenderer({antialias:false,alpha:false,powerPreference:'high-performance'});
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
     scene.add(new THREE.HemisphereLight(0xffffff,0x445566,1.25));
     const dirLight=new THREE.DirectionalLight(0xffffff,1.2); dirLight.position.set(2,5,3); scene.add(dirLight);
-    const baseGeo=new THREE.BoxGeometry(chipW,chipH,0.5);
-    const baseMat=new THREE.MeshStandardMaterial({color:0x10151a,roughness:.75,metalness:.05});
-    const base=new THREE.Mesh(baseGeo,baseMat); base.position.set(0,0,-0.255); scene.add(base);
+    // 500 um thick silicon chip below a very thin Nb top film.
+    // Vertical geometry is in real scale: 1 Three.js unit = 1000 um.
+    const siThicknessUnit=500/UM_PER_UNIT;
+    const nbThicknessUnit=0.2/UM_PER_UNIT; // 200 nm = 0.2 um
+    const baseGeo=new THREE.BoxGeometry(chipW,chipH,siThicknessUnit);
+    const baseMat=new THREE.MeshStandardMaterial({color:0x10151a,roughness:.75,metalness:.03});
+    const base=new THREE.Mesh(baseGeo,baseMat); base.position.set(0,0,-siThicknessUnit/2); scene.add(base);
+    const nbFilm=new THREE.Mesh(new THREE.BoxGeometry(chipW,chipH,Math.max(nbThicknessUnit,0.001)), new THREE.MeshStandardMaterial({color:0x7c8793,roughness:.35,metalness:.85,transparent:true,opacity:.55}));
+    nbFilm.position.set(0,0,0.0005); scene.add(nbFilm);
     function makeTexture(){
       const S=2048, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
       g.fillStyle='#161d22'; g.fillRect(0,0,S,S);
@@ -77,9 +84,9 @@
       return new THREE.CanvasTexture(c);
     }
     const topMat=new THREE.MeshBasicMaterial({map:makeTexture(),side:THREE.DoubleSide});
-    const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat); top.position.z=0.012; scene.add(top);
+    const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat); top.position.z=0.002; scene.add(top);
     const edge=new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({color:0x88aaff,transparent:true,opacity:.35})); edge.position.copy(base.position); scene.add(edge);
-    status.textContent='Ready: real geometry is drawn as a stable texture.';
+    status.textContent='Ready: start above the 500 µm Si chip; Nb/GDS texture is on top.'; setTimeout(()=>status.classList.add('hidden'),5000);
     function updateCamera(){
       yaw += (targetYaw-yaw)*0.12; pitch += (targetPitch-pitch)*0.12; pitch=Math.max(-1.45,Math.min(1.45,pitch));
       const wx=(state.x-chipUm.w/2)/UM_PER_UNIT, wy=(state.y-chipUm.h/2)/UM_PER_UNIT, wz=state.z/UM_PER_UNIT;
@@ -109,9 +116,9 @@
     addEventListener('deviceorientation',e=>{ currentOri={alpha:e.alpha||0,beta:e.beta||0,gamma:e.gamma||0}; }, true);
     document.getElementById('startBtn').onclick=()=>{ running=!running; document.getElementById('startBtn').textContent=running?'PAUSE':'START FLYING'; };
     document.getElementById('cardboardBtn').onclick=()=>{ cardboard=!cardboard; document.getElementById('cardboardBtn').textContent='CARDBOARD SPLIT: '+(cardboard?'ON':'OFF'); };
-    document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=1500; targetYaw=yaw=0; targetPitch=pitch=-0.45; initialOri=currentOri; };
-    document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.textContent='Fullscreen unavailable: '+err.message; } };
-    document.getElementById('motionBtn').onclick=async()=>{ try{ if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){ const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted'){status.textContent='Phone motion permission denied.'; return;} } motion=true; initialOri=currentOri||{alpha:0,beta:0,gamma:0}; status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.'; }catch(err){ status.textContent='Motion error: '+err.message; } };
+    document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200; targetYaw=yaw=0; targetPitch=pitch=-0.35; initialOri=currentOri; };
+    document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
+    document.getElementById('motionBtn').onclick=async()=>{ try{ if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){ const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted'){status.classList.remove('hidden'); status.textContent='Phone motion permission denied.'; return;} } motion=true; initialOri=currentOri||{alpha:0,beta:0,gamma:0}; status.classList.remove('hidden'); status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.'; setTimeout(()=>status.classList.add('hidden'),5000); }catch(err){ status.classList.remove('hidden'); status.textContent='Motion error: '+err.message; } };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
   })();
   </script>
