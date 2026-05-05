@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v18</title>
+  <title>Quantum Chip Photon VR v19</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#030609;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     #ui{position:fixed;left:8px;top:8px;z-index:10;display:flex;gap:5px;flex-wrap:wrap;max-width:92vw}
@@ -274,7 +274,7 @@
       ).normalize();
     }
     function updateCamera(){
-      yaw += (targetYaw-yaw)*0.12; pitch += (targetPitch-pitch)*0.12; pitch=Math.max(-1.35,Math.min(1.25,pitch));
+      yaw += (targetYaw-yaw)*0.08; pitch += (targetPitch-pitch)*0.08; pitch=Math.max(-1.35,Math.min(1.25,pitch));
       const wx=(state.x-chipUm.w/2)/UM_PER_UNIT, wy=(state.y-chipUm.h/2)/UM_PER_UNIT, wz=state.z/UM_PER_UNIT;
       camera.position.set(wx,wy,wz);
       const d=lookDirection();
@@ -309,12 +309,26 @@
 
     function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
       if(motion && currentOri && initialOri){
-        let da=(currentOri.alpha-initialOri.alpha)*Math.PI/180; if(da>Math.PI)da-=2*Math.PI; if(da<-Math.PI)da+=2*Math.PI;
+        // alpha (compass heading) -> yaw, with wrap at ±π
+        let da=(currentOri.alpha-initialOri.alpha)*Math.PI/180;
+        if(da>Math.PI)da-=2*Math.PI; if(da<-Math.PI)da+=2*Math.PI;
         targetYaw=-da;
-        const db=(currentOri.beta-initialOri.beta)*Math.PI/180;
-        const dg=(currentOri.gamma-initialOri.gamma)*Math.PI/180;
-        const tilt=Math.abs(dg)>Math.abs(db)*0.6 ? -dg : db;
-        targetPitch=tilt - .42;
+        // v19: smooth pitch from a CONTINUOUS blend of beta (front/back tilt) and gamma (left/right tilt).
+        // Old code switched between them based on magnitude, which produced sudden jumps when crossing the
+        // threshold. Now we rotate the (beta, gamma) tilt vector by the device-screen orientation, giving
+        // a single smooth pitch reading regardless of how the phone is held.
+        let db=(currentOri.beta -initialOri.beta )*Math.PI/180;
+        if(db>Math.PI)db-=2*Math.PI; if(db<-Math.PI)db+=2*Math.PI;
+        let dg=(currentOri.gamma-initialOri.gamma)*Math.PI/180;
+        if(dg> Math.PI/2)dg-=Math.PI; if(dg<-Math.PI/2)dg+=Math.PI;
+        const orientationDeg = (typeof window.orientation === 'number')
+          ? window.orientation
+          : ((screen.orientation && screen.orientation.angle) || 0);
+        const o = orientationDeg * Math.PI/180;
+        const tilt = db*Math.cos(o) - dg*Math.sin(o);
+        targetPitch = tilt - .42;
+        // clamp the target itself so pitch can't accumulate past the visible range
+        targetPitch = Math.max(-1.35, Math.min(1.25, targetPitch));
       }
       updateCamera();
       const boostFactor = boost ? 5 : 1;
