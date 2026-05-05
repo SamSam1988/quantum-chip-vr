@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>Flying Photon VR - Superconducting Chip</title>
+<style>
+  html, body { margin:0; overflow:hidden; background:#05070a; font-family: system-ui, sans-serif; }
+  #hud { position: fixed; right: 12px; top: 12px; z-index: 10; color: #e8f3ff; background: rgba(0,0,0,.55); padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.35; min-width: 250px; }
+  #help { position: fixed; left: 12px; bottom: 12px; z-index: 10; color: #e8f3ff; background: rgba(0,0,0,.50); padding: 10px 12px; border-radius: 12px; font-size: 13px; max-width: 380px; }
+  button { cursor:pointer; border:0; border-radius:10px; padding:8px 10px; margin-top:8px; background:#dcecff; color:#04101e; font-weight:600; }
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 8px; height: 8px; border:1px solid #fff; border-radius:50%; transform: translate(-50%,-50%); opacity:.65; z-index:9; pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="crosshair"></div>
+<div id="hud">Loading chip...</div>
+<div id="help">
+  <b>Flying photon prototype</b><br>
+  Look anywhere to fly that way. Speed = height/30 sec + 3 µm/s.<br>
+  Desktop: drag to look, WASD optional. Phone: open in Chrome, tap Enter VR/Cardboard.<br>
+  <button id="resetBtn">Reset photon</button>
+</div>
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://unpkg.com/three@0.160.0/examples/js/webxr/VRButton.js"></script>
+<script src="chip-data.js"></script>
+<script>
+const data = window.CHIP_DATA;
+const bbox = data.bbox, minX=bbox[0], minY=bbox[1], maxX=bbox[2], maxY=bbox[3];
+const W=maxX-minX, H=maxY-minY, MAX_Z=data.maxHeightUm;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070a);
+scene.fog = new THREE.FogExp2(0x05070a, 0.00007);
+const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.01, 30000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight); renderer.xr.enabled = true; document.body.appendChild(renderer.domElement);
+document.body.appendChild(VRButton.createButton(renderer));
+const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.target.set(W/2,H/2,0);
+scene.add(new THREE.HemisphereLight(0xbfdcff,0x202020,1.9));
+const sun = new THREE.DirectionalLight(0xffffff,1.1); sun.position.set(-5000,-4000,8000); scene.add(sun);
+const mats = {
+  si: new THREE.MeshStandardMaterial({color:0x5b626b, roughness:.85, metalness:0}),
+  nb: new THREE.MeshStandardMaterial({color:0x9cc7ff, roughness:.28, metalness:.75}),
+  hole: new THREE.MeshStandardMaterial({color:0x11151a, roughness:.9, metalness:0}),
+  m136: new THREE.MeshStandardMaterial({color:0xffcc66, roughness:.32, metalness:.65}),
+  m137: new THREE.MeshStandardMaterial({color:0xff8a65, roughness:.32, metalness:.65}),
+  d146: new THREE.MeshStandardMaterial({color:0x7ee7ff, transparent:true, opacity:.48, roughness:.2, metalness:0}),
+  d147: new THREE.MeshStandardMaterial({color:0xd89cff, transparent:true, opacity:.48, roughness:.2, metalness:0}),
+  aux: new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true, transparent:true, opacity:.35})
+};
+function toLocal(p){ return [p[0]-minX, p[1]-minY]; }
+function makeShape(rec){
+  const outer = rec.outer.map(toLocal); const s = new THREE.Shape();
+  outer.forEach((p,i)=> i? s.lineTo(p[0],p[1]) : s.moveTo(p[0],p[1])); s.closePath();
+  (rec.holes||[]).forEach(h=>{ const hp=h.map(toLocal); const path=new THREE.Path(); hp.forEach((p,i)=> i? path.lineTo(p[0],p[1]) : path.moveTo(p[0],p[1])); path.closePath(); s.holes.push(path); });
+  return s;
+}
+function addExtruded(records, z, depth, mat, name){
+  const group = new THREE.Group(); group.name=name;
+  records.forEach(rec=>{ try { const geo = new THREE.ExtrudeGeometry(makeShape(rec), {depth:depth, bevelEnabled:false}); geo.rotateX(0); const mesh = new THREE.Mesh(geo, mat); mesh.position.z=z; group.add(mesh); } catch(e){} });
+  scene.add(group); return group;
+}
+function layerRecords(layer){ return (data.layers[layer]||[]).map(poly=>({outer:poly, holes:[]})); }
+// Silicon block: top surface at z=0, body below.
+const siGeo = new THREE.BoxGeometry(W,H,500); const si = new THREE.Mesh(siGeo, mats.si); si.position.set(W/2,H/2,-250); scene.add(si);
+// Nb sheet with etched openings.
+addExtruded(data.nbSheet, 0, .2, mats.nb, 'continuous 200 nm Nb minus layer 134');
+// show etched opening floors slightly dark.
+addExtruded(layerRecords('134'), 0.002, .006, mats.hole, 'Nb etched openings');
+addExtruded(layerRecords('136'), .2, .13, mats.m136, 'layer 136 added Nb');
+addExtruded(layerRecords('137'), .33, .13, mats.m137, 'layer 137 added Nb');
+addExtruded(layerRecords('146'), .46, .25, mats.d146, 'dielectric crossover 146');
+addExtruded(layerRecords('147'), .72, .25, mats.d147, 'dielectric crossover 147');
+addExtruded(layerRecords('131'), .95, .04, mats.aux, 'aux layer 131');
+// grid and boundary
+const grid = new THREE.GridHelper(Math.max(W,H), 40, 0x35516b, 0x1a2735); grid.position.set(W/2,H/2,0.001); grid.rotation.x=Math.PI/2; scene.add(grid);
+const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W,H,MAX_Z)), new THREE.LineBasicMaterial({color:0x3c7cff, transparent:true, opacity:.25})); edges.position.set(W/2,H/2,MAX_Z/2); scene.add(edges);
+// photon marker
+const photon = new THREE.Mesh(new THREE.SphereGeometry(2.5,24,12), new THREE.MeshBasicMaterial({color:0xffffaa})); scene.add(photon);
+let keys={}; addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true); addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function reset(){ camera.position.set(W/2, H/2, 1500); controls.target.set(W/2+1,H/2,1500); }
+document.getElementById('resetBtn').onclick=reset; reset();
+let last=performance.now(); const hud=document.getElementById('hud');
+function animate(now){
+  const dt=Math.min((now-last)/1000, .08); last=now;
+  controls.update();
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir).normalize();
+  const height=Math.max(0, camera.position.z); const speed=height/30 + 3;
+  camera.position.addScaledVector(dir, speed*dt);
+  // optional desktop nudges
+  const right=new THREE.Vector3().crossVectors(dir,camera.up).normalize();
+  if(keys['w']) camera.position.addScaledVector(dir, speed*dt*8);
+  if(keys['s']) camera.position.addScaledVector(dir, -speed*dt*8);
+  if(keys['a']) camera.position.addScaledVector(right, -speed*dt*8);
+  if(keys['d']) camera.position.addScaledVector(right, speed*dt*8);
+  camera.position.x=THREE.MathUtils.clamp(camera.position.x,0,W);
+  camera.position.y=THREE.MathUtils.clamp(camera.position.y,0,H);
+  camera.position.z=THREE.MathUtils.clamp(camera.position.z,0.05,MAX_Z);
+  photon.position.copy(camera.position).addScaledVector(dir,12);
+  hud.innerHTML = `<b>Velocity</b>: ${speed.toFixed(2)} µm/s<br>`+
+    `<b>Position</b>: x=${camera.position.x.toFixed(1)} µm, y=${camera.position.y.toFixed(1)} µm, z=${camera.position.z.toFixed(1)} µm<br>`+
+    `<b>Height above chip</b>: ${height.toFixed(1)} µm<br>`+
+    `<b>Layers</b>: Si 500 µm; Nb 200 nm; 136/137 +130 nm; 146/147 dielectric crossovers`;
+  renderer.render(scene,camera);
+}
+renderer.setAnimationLoop(animate);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body>
+</html>
