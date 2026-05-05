@@ -1,17 +1,87 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Flying Photon VR</title><style>
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05070a;font-family:system-ui,sans-serif;color:#e8f3ff}#hud{position:fixed;right:10px;top:10px;z-index:20;background:#000b;padding:10px;border-radius:12px;font-size:13px}#help{position:fixed;left:10px;bottom:10px;z-index:20;background:#000a;padding:10px;border-radius:12px;font-size:13px;max-width:430px}.btn{border:0;border-radius:12px;padding:11px 14px;margin:4px;background:#dcecff;color:#04101e;font-weight:800}#vrBtn{position:fixed;left:12px;top:12px;z-index:9999;background:#50ffb8;font-size:18px;box-shadow:0 0 20px #50ffb8}#cross{position:fixed;left:50%;top:50%;width:10px;height:10px;border:1px solid white;border-radius:50%;transform:translate(-50%,-50%);z-index:10}canvas{display:block}</style></head><body>
-<button id="vrBtn" class="btn">ENTER VR / CARDBOARD</button><div id="cross"></div><div id="hud">Starting...</div><div id="help"><b>Flying photon prototype</b><br>Look to fly. Speed = height/30 + 3 µm/s.<br><button id="resetBtn" class="btn">Reset photon</button><button id="debugBtn" class="btn">Debug info</button></div>
-<script src="./chip-data.js"></script><script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script><script>
-const hud=document.getElementById('hud'),vrBtn=document.getElementById('vrBtn');let scene,camera,renderer,stereo,W=10000,H=10000,MAX_Z=10000,minX=0,minY=0,cardboard=false,yaw=0,pitch=0,drag=false,lx=0,ly=0,deviceQuat=null,haveMotion=false;
-function err(m){hud.innerHTML='<b style="color:#ffb0b0">Error</b><br>'+m+'<br>Make sure index.html and chip-data.js are in repo root.'}
-window.onerror=(m)=>err(m);
-function local(p){return[p[0]-minX,p[1]-minY]}function shape(poly){let s=new THREE.Shape();poly.map(local).forEach((p,i)=>i?s.lineTo(p[0],p[1]):s.moveTo(p[0],p[1]));s.closePath();return s}
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Flying Photon VR</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05070a;font-family:system-ui,sans-serif;color:#e8f3ff;touch-action:none}
+  canvas{display:block}
+  #hud{position:fixed;right:10px;top:10px;z-index:20;background:#000b;padding:10px;border-radius:12px;font-size:13px;line-height:1.35}
+  #help{position:fixed;left:10px;bottom:10px;z-index:20;background:#000a;padding:10px;border-radius:12px;font-size:13px;max-width:460px;line-height:1.35}
+  .btn{border:0;border-radius:12px;padding:11px 14px;margin:4px;background:#dcecff;color:#04101e;font-weight:800}
+  #vrBtn{position:fixed;left:12px;top:12px;z-index:9999;background:#50ffb8;font-size:17px;box-shadow:0 0 20px #50ffb8}
+  #motionBtn{position:fixed;left:12px;top:64px;z-index:9999;background:#ffd966;font-size:15px}
+  #cross{position:fixed;left:50%;top:50%;width:10px;height:10px;border:1px solid #ffffffaa;border-radius:50%;transform:translate(-50%,-50%);z-index:10;pointer-events:none}
+</style>
+</head>
+<body>
+<button id="vrBtn" class="btn">ENTER CARDBOARD</button>
+<button id="motionBtn" class="btn">ENABLE PHONE MOTION</button>
+<div id="cross"></div>
+<div id="hud">Starting...</div>
+<div id="help"><b>Flying photon prototype</b><br>Phone: tap ENABLE PHONE MOTION once, then ENTER CARDBOARD. Look to fly continuously. No grid in this version.<br><button id="resetBtn" class="btn">Reset photon</button><button id="debugBtn" class="btn">Debug info</button></div>
+<script src="./chip-data.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+const hud=document.getElementById('hud'),vrBtn=document.getElementById('vrBtn'),motionBtn=document.getElementById('motionBtn');
+let scene,camera,renderer,stereo,W=10000,H=10000,MAX_Z=10000,minX=0,minY=0,cardboard=false,yaw=0,pitch=0,drag=false,lx=0,ly=0;
+let haveMotion=false,motionAllowed=false,alpha=0,beta=0,gamma=0,screenOrient=0,smoothQuat=new THREE.Quaternion(),targetQuat=new THREE.Quaternion();
+function err(m){hud.innerHTML='<b style="color:#ffb0b0">Error</b><br>'+m+'<br>Check that index.html and chip-data.js are in the repo root.'}
+window.onerror=(m)=>err(String(m));
+function local(p){return[p[0]-minX,p[1]-minY]}
+function shape(poly){let s=new THREE.Shape();poly.map(local).forEach((p,i)=>i?s.lineTo(p[0],p[1]):s.moveTo(p[0],p[1]));s.closePath();return s}
 function addLayer(polys,z,d,mat,name,limit){let g=new THREE.Group();g.name=name;let step=Math.max(1,Math.ceil(polys.length/limit));let used=0;for(let i=0;i<polys.length && used<limit;i+=step){try{let geo=new THREE.ExtrudeGeometry(shape(polys[i]),{depth:d,bevelEnabled:false,curveSegments:1});let mesh=new THREE.Mesh(geo,mat);mesh.position.z=z;g.add(mesh);used++}catch(e){}}scene.add(g);return used}
-function init(){if(!THREE)return err('Three.js did not load.');let data=window.CHIP_DATA||{};if(data.bbox){minX=data.bbox[0];minY=data.bbox[1];W=data.bbox[2]-data.bbox[0];H=data.bbox[3]-data.bbox[1];MAX_Z=data.maxHeightUm||10000}scene=new THREE.Scene();scene.background=new THREE.Color(0x05070a);scene.fog=new THREE.FogExp2(0x05070a,.00006);camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.05,50000);renderer=new THREE.WebGLRenderer({antialias:false});renderer.setPixelRatio(1);renderer.setSize(innerWidth,innerHeight);document.body.appendChild(renderer.domElement);stereo=new THREE.StereoCamera();stereo.eyeSep=2.5;scene.add(new THREE.HemisphereLight(0xbfdcff,0x202020,1.7));let sun=new THREE.DirectionalLight(0xffffff,1);sun.position.set(-3000,-3000,6000);scene.add(sun);
-let mats={si:new THREE.MeshStandardMaterial({color:0x5b626b,roughness:.85}),hole:new THREE.MeshStandardMaterial({color:0x101318}),m136:new THREE.MeshStandardMaterial({color:0xffcc66,metalness:.65,roughness:.32}),m137:new THREE.MeshStandardMaterial({color:0xff8a65,metalness:.65,roughness:.32}),d146:new THREE.MeshStandardMaterial({color:0x7ee7ff,transparent:true,opacity:.55}),d147:new THREE.MeshStandardMaterial({color:0xd89cff,transparent:true,opacity:.55})};
-let si=new THREE.Mesh(new THREE.BoxGeometry(W,H,500),mats.si);si.position.set(W/2,H/2,-250);scene.add(si);let count=0,L=data.layers||{};count+=addLayer(L['134']||[],.002,.006,mats.hole,'sampled etched openings',700);count+=addLayer(L['136']||[],.2,.13,mats.m136,'layer 136',1200);count+=addLayer(L['137']||[],.33,.13,mats.m137,'layer 137',1200);count+=addLayer(L['146']||[],.46,.25,mats.d146,'dielectric crossover 146',1200);count+=addLayer(L['147']||[],.72,.25,mats.d147,'dielectric crossover 147',1200);
-let grid=new THREE.GridHelper(Math.max(W,H),40,0x35516b,0x1a2735);grid.position.set(W/2,H/2,.001);grid.rotation.x=Math.PI/2;scene.add(grid);let edges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W,H,MAX_Z)),new THREE.LineBasicMaterial({color:0x3c7cff,transparent:true,opacity:.3}));edges.position.set(W/2,H/2,MAX_Z/2);scene.add(edges);reset();bind();hud.innerHTML='Loaded '+count+' sampled GDS polygons';requestAnimationFrame(loop)}
-function reset(){camera.position.set(W/2,H/2,1500);yaw=0;pitch=0}function bind(){document.getElementById('resetBtn').onclick=reset;document.getElementById('debugBtn').onclick=()=>alert('CHIP_DATA '+!!window.CHIP_DATA+'\nTHREE '+!!window.THREE+'\nmode '+(cardboard?'VR':'normal')+'\nURL '+location.href);vrBtn.onclick=()=>{cardboard=!cardboard;vrBtn.textContent=cardboard?'EXIT VR':'ENTER VR / CARDBOARD';document.body.requestFullscreen?.().catch(()=>{});if(DeviceOrientationEvent?.requestPermission)DeviceOrientationEvent.requestPermission().catch(()=>{})};addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});addEventListener('pointerdown',e=>{drag=true;lx=e.clientX;ly=e.clientY});addEventListener('pointerup',()=>drag=false);addEventListener('pointermove',e=>{if(!drag)return;yaw-=(e.clientX-lx)*.005;pitch-=(e.clientY-ly)*.005;pitch=Math.max(-1.45,Math.min(1.45,pitch));lx=e.clientX;ly=e.clientY});addEventListener('deviceorientation',e=>{if(e.alpha==null)return;haveMotion=true;deviceQuat=new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(e.beta||0),THREE.MathUtils.degToRad(e.alpha||0),-THREE.MathUtils.degToRad(e.gamma||0),'YXZ'))},true)}
-let last=performance.now();function loop(now){requestAnimationFrame(loop);let dt=Math.min((now-last)/1000,.08);last=now;if(cardboard&&deviceQuat)camera.quaternion.copy(deviceQuat);else camera.rotation.set(pitch,yaw,0,'YXZ');let dir=new THREE.Vector3();camera.getWorldDirection(dir).normalize();let h=Math.max(0,camera.position.z),v=h/30+3;camera.position.addScaledVector(dir,v*dt);camera.position.x=THREE.MathUtils.clamp(camera.position.x,0,W);camera.position.y=THREE.MathUtils.clamp(camera.position.y,0,H);camera.position.z=THREE.MathUtils.clamp(camera.position.z,.05,MAX_Z);hud.innerHTML='<b>Velocity</b>: '+v.toFixed(2)+' µm/s<br><b>Position</b>: x='+camera.position.x.toFixed(1)+', y='+camera.position.y.toFixed(1)+', z='+camera.position.z.toFixed(1)+' µm<br><b>Mode</b>: '+(cardboard?'Cardboard':'normal')+'<br><b>Motion</b>: '+(haveMotion?'yes':'no');if(cardboard){let w=innerWidth,hgt=innerHeight;stereo.update(camera);renderer.setScissorTest(true);renderer.clear();renderer.setViewport(0,0,w/2,hgt);renderer.setScissor(0,0,w/2,hgt);renderer.render(scene,stereo.cameraL);renderer.setViewport(w/2,0,w/2,hgt);renderer.setScissor(w/2,0,w/2,hgt);renderer.render(scene,stereo.cameraR);renderer.setScissorTest(false)}else renderer.render(scene,camera)}
-setTimeout(init,100);
-</script></body></html>
+function setObjectQuaternion(quaternion, alphaDeg, betaDeg, gammaDeg, orientDeg){
+  const zee=new THREE.Vector3(0,0,1);
+  const euler=new THREE.Euler();
+  const q0=new THREE.Quaternion();
+  const q1=new THREE.Quaternion(-Math.sqrt(0.5),0,0,Math.sqrt(0.5));
+  const alpha=THREE.MathUtils.degToRad(alphaDeg||0), beta=THREE.MathUtils.degToRad(betaDeg||0), gamma=THREE.MathUtils.degToRad(gammaDeg||0), orient=THREE.MathUtils.degToRad(orientDeg||0);
+  euler.set(beta,alpha,-gamma,'YXZ');
+  quaternion.setFromEuler(euler);
+  quaternion.multiply(q1);
+  quaternion.multiply(q0.setFromAxisAngle(zee,-orient));
+}
+function init(){
+  if(!window.THREE)return err('Three.js did not load.');
+  const data=window.CHIP_DATA||{}; if(data.bbox){minX=data.bbox[0];minY=data.bbox[1];W=data.bbox[2]-data.bbox[0];H=data.bbox[3]-data.bbox[1];MAX_Z=data.maxHeightUm||10000}
+  scene=new THREE.Scene();scene.background=new THREE.Color(0x05070a);scene.fog=new THREE.FogExp2(0x05070a,.00005);
+  camera=new THREE.PerspectiveCamera(72,innerWidth/innerHeight,.05,50000);
+  renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));renderer.setSize(innerWidth,innerHeight);renderer.autoClear=true;document.body.appendChild(renderer.domElement);
+  stereo=new THREE.StereoCamera();stereo.eyeSep=2.5;
+  scene.add(new THREE.HemisphereLight(0xbfdcff,0x202020,1.7));let sun=new THREE.DirectionalLight(0xffffff,1);sun.position.set(-3000,-3000,6000);scene.add(sun);
+  let mats={si:new THREE.MeshStandardMaterial({color:0x5b626b,roughness:.85}),hole:new THREE.MeshStandardMaterial({color:0x101318}),m136:new THREE.MeshStandardMaterial({color:0xffcc66,metalness:.65,roughness:.32}),m137:new THREE.MeshStandardMaterial({color:0xff8a65,metalness:.65,roughness:.32}),d146:new THREE.MeshStandardMaterial({color:0x7ee7ff,transparent:true,opacity:.55,depthWrite:false}),d147:new THREE.MeshStandardMaterial({color:0xd89cff,transparent:true,opacity:.55,depthWrite:false})};
+  let si=new THREE.Mesh(new THREE.BoxGeometry(W,H,500),mats.si);si.position.set(W/2,H/2,-250);scene.add(si);
+  let count=0,L=data.layers||{};count+=addLayer(L['134']||[],.01,.006,mats.hole,'etched Nb openings',350);count+=addLayer(L['136']||[],.2,.13,mats.m136,'Nb layer 136',700);count+=addLayer(L['137']||[],.33,.13,mats.m137,'Nb layer 137',700);count+=addLayer(L['146']||[],.46,.25,mats.d146,'dielectric crossover 146',700);count+=addLayer(L['147']||[],.72,.25,mats.d147,'dielectric crossover 147',700);
+  let edges=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W,H,MAX_Z)),new THREE.LineBasicMaterial({color:0x3c7cff,transparent:true,opacity:.22}));edges.position.set(W/2,H/2,MAX_Z/2);scene.add(edges);
+  reset();bind();hud.innerHTML='Loaded '+count+' sampled polygons';requestAnimationFrame(loop);
+}
+function reset(){camera.position.set(W/2,H/2,1500);yaw=0;pitch=0;camera.rotation.set(0,0,0);smoothQuat.identity()}
+async function enableMotion(){
+  try{ if(window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission==='function'){ const r=await DeviceOrientationEvent.requestPermission(); motionAllowed=(r==='granted'); } else { motionAllowed=true; }
+  catch(e){ motionAllowed=false; }
+  motionBtn.textContent=motionAllowed?'PHONE MOTION ON':'MOTION BLOCKED';
+}
+function bind(){
+  document.getElementById('resetBtn').onclick=reset; document.getElementById('debugBtn').onclick=()=>alert('CHIP_DATA '+!!window.CHIP_DATA+'\nTHREE '+!!window.THREE+'\nCardboard '+cardboard+'\nMotion allowed '+motionAllowed+'\nMotion events '+haveMotion+'\nURL '+location.href);
+  motionBtn.onclick=enableMotion;
+  vrBtn.onclick=async()=>{ if(!motionAllowed) await enableMotion(); cardboard=!cardboard; vrBtn.textContent=cardboard?'EXIT CARDBOARD':'ENTER CARDBOARD'; document.body.requestFullscreen?.().catch(()=>{}); };
+  addEventListener('orientationchange',()=>{screenOrient=window.orientation||0}); screenOrient=window.orientation||0;
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+  addEventListener('pointerdown',e=>{drag=true;lx=e.clientX;ly=e.clientY}); addEventListener('pointerup',()=>drag=false); addEventListener('pointercancel',()=>drag=false);
+  addEventListener('pointermove',e=>{if(!drag)return;yaw-=(e.clientX-lx)*.005;pitch-=(e.clientY-ly)*.005;pitch=Math.max(-1.45,Math.min(1.45,pitch));lx=e.clientX;ly=e.clientY});
+  addEventListener('deviceorientation',e=>{if(e.alpha==null)return;haveMotion=true;alpha=e.alpha;beta=e.beta;gamma=e.gamma;},true);
+}
+let last=performance.now();
+function loop(now){requestAnimationFrame(loop);let dt=Math.min((now-last)/1000,.06);last=now;
+  if(motionAllowed&&haveMotion){setObjectQuaternion(targetQuat,alpha,beta,gamma,screenOrient);smoothQuat.slerp(targetQuat,Math.min(1,dt*8));camera.quaternion.copy(smoothQuat)} else {camera.rotation.set(pitch,yaw,0,'YXZ')}
+  let dir=new THREE.Vector3();camera.getWorldDirection(dir).normalize();let h=Math.max(0,camera.position.z),v=h/30+3;camera.position.addScaledVector(dir,v*dt);
+  camera.position.x=THREE.MathUtils.clamp(camera.position.x,0,W);camera.position.y=THREE.MathUtils.clamp(camera.position.y,0,H);camera.position.z=THREE.MathUtils.clamp(camera.position.z,.05,MAX_Z);
+  hud.innerHTML='<b>Velocity</b>: '+v.toFixed(2)+' µm/s<br><b>Position</b>: x='+camera.position.x.toFixed(1)+', y='+camera.position.y.toFixed(1)+', z='+camera.position.z.toFixed(1)+' µm<br><b>Mode</b>: '+(cardboard?'Cardboard split':'normal')+'<br><b>Motion</b>: '+(haveMotion?'yes':'no')+' / '+(motionAllowed?'allowed':'not enabled');
+  if(cardboard){let w=innerWidth,hgt=innerHeight;stereo.update(camera);renderer.setScissorTest(true);renderer.clear();renderer.setViewport(0,0,w/2,hgt);renderer.setScissor(0,0,w/2,hgt);renderer.render(scene,stereo.cameraL);renderer.setViewport(w/2,0,w/2,hgt);renderer.setScissor(w/2,0,w/2,hgt);renderer.render(scene,stereo.cameraR);renderer.setScissorTest(false)} else renderer.render(scene,camera);
+}
+setTimeout(init,80);
+</script>
+</body>
+</html>
