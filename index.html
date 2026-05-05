@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v13</title>
+  <title>Quantum Chip Photon VR v15</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#030609;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     #ui{position:fixed;left:10px;top:10px;z-index:10;display:flex;gap:8px;flex-wrap:wrap;max-width:92vw}
@@ -103,11 +103,10 @@
       const styles={
         '136':'rgba(248,250,252,.85)',
         '137':'rgba(215,226,238,.80)',
-        '146':'rgba(255,215,95,.74)',
-        '147':'rgba(255,130,230,.68)',
         '131':'rgba(255,150,250,.95)'
       };
-      const order=['131','136','137','146','147'];
+      // v15: 146/147 are 3D meshes now, no longer painted on the texture.
+      const order=['131','136','137'];
       for(const layer of order){ const polys=data.layers[layer]||[]; g.fillStyle=styles[layer]||'rgba(255,255,255,.6)';
         g.strokeStyle='rgba(255,255,255,.70)'; g.lineWidth=3;
         for(const p of polys){ if(!p||p.length<3) continue; g.beginPath(); const a=map(p[0]); g.moveTo(a[0],a[1]); for(let i=1;i<p.length;i++){const m=map(p[i]); g.lineTo(m[0],m[1]);} g.closePath(); g.fill(); g.stroke(); }
@@ -139,11 +138,17 @@
       const polys = data.layers[layerId] || [];
       const tUnit = Math.max(thickUm/UM_PER_UNIT, 0.0001);
       const baseZ = baseZUm/UM_PER_UNIT;
-      const mat = new THREE.MeshStandardMaterial({
+      const matCfg = {
         color, emissive, emissiveIntensity,
         roughness: opts.roughness != null ? opts.roughness : 0.32,
         metalness: opts.metalness != null ? opts.metalness : 0.85
-      });
+      };
+      if (opts.opacity != null && opts.opacity < 1.0){
+        matCfg.transparent = true;
+        matCfg.opacity = opts.opacity;
+        matCfg.depthWrite = false;
+      }
+      const mat = new THREE.MeshStandardMaterial(matCfg);
       for (const p of polys){
         if (!p || p.length<3) continue;
         try {
@@ -157,6 +162,14 @@
     addLayerMeshes('136', 0xffe8b8, 0x402200, 0.35, 0.13, NB_THICKNESS_UM + 0.05);
     addLayerMeshes('137', 0xffd070, 0x553200, 0.55, 0.13, NB_THICKNESS_UM + 0.20);
     addLayerMeshes('131', 0xff66ee, 0xff44cc, 1.5, 0.08, NB_THICKNESS_UM + 0.34, {roughness:0.2, metalness:0.4});
+
+    // ---- v15: bandaid crossover dielectric (layer 146) at 1.5x Nb thickness, sitting on top of Nb.
+    // Translucent so the underlying chip remains readable.
+    const D146_THICK = 1.5 * NB_THICKNESS_UM; // µm
+    addLayerMeshes('146', 0x9be3ff, 0x224a66, 0.35, D146_THICK, NB_THICKNESS_UM, {roughness:0.45, metalness:0.05, opacity:0.55});
+    // ---- v15: top metal of bandaid crossovers (layer 147) at 2.0x Nb thickness, on top of 146.
+    const D147_THICK = 2.0 * NB_THICKNESS_UM; // µm
+    addLayerMeshes('147', 0xeef4ff, 0x3a4a66, 0.20, D147_THICK, NB_THICKNESS_UM + D146_THICK, {roughness:0.3, metalness:0.85, opacity:0.92});
 
     // ---- blue/orange glow halos around the 8 lumped-element resonators
     const qubitCenters = [
@@ -196,13 +209,45 @@
       haloGroup.add(mesh); halos.push(mesh);
     });
 
+    // ---- v15: green pulses inside the interdigitated capacitors.
+    // Each qubit site has a row of bright-green flares spread across the IDC fingers.
+    function makeGreenTex(){
+      const cv = document.createElement('canvas'); cv.width=cv.height=256;
+      const cg = cv.getContext('2d');
+      const grd = cg.createRadialGradient(128,128,2,128,128,124);
+      grd.addColorStop(0,    'rgba(225,255,205,1.0)');
+      grd.addColorStop(0.18, 'rgba(90,255,130,0.9)');
+      grd.addColorStop(0.50, 'rgba(40,210,90,0.4)');
+      grd.addColorStop(1.00, 'rgba(0,80,30,0)');
+      cg.fillStyle = grd; cg.fillRect(0,0,256,256);
+      return new THREE.CanvasTexture(cv);
+    }
+    const greenTex = makeGreenTex();
+    const idcGroup = new THREE.Group(); scene.add(idcGroup);
+    const idcPulses = [];
+    qubitCenters.forEach(([cx,cy], qi)=>{
+      // Interleave 9 fingers across the IDC body of each qubit (~280 µm wide)
+      const N = 9;
+      const spanUm = 280;
+      const yOffsetUm = ((qi % 2) ? -36 : 36); // alternate sides so fingers fan out from the qubit pad
+      for (let k=0; k<N; k++){
+        const offX = (k - (N-1)/2) * (spanUm/(N-1));
+        const sizeUm = 95;
+        const mat = new THREE.MeshBasicMaterial({map: greenTex, transparent:true, depthWrite:false, blending: THREE.AdditiveBlending});
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeUm/UM_PER_UNIT, sizeUm/UM_PER_UNIT), mat);
+        mesh.position.set((cx + offX - chipUm.w/2)/UM_PER_UNIT, (cy + yOffsetUm - chipUm.h/2)/UM_PER_UNIT, nbHeight + 0.0008);
+        mesh.userData = {phase: qi*0.6 + k*0.42, base: sizeUm/UM_PER_UNIT};
+        idcGroup.add(mesh); idcPulses.push(mesh);
+      }
+    });
+
     // ---- floor: photon hovers on Nb at z=NB_THICKNESS_UM, dips to z=0 inside layer-134 etched openings.
     function polyBounds(poly){ let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity; for(const q of poly){ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); } return {minx,miny,maxx,maxy,w:maxx-minx,h:maxy-miny}; }
     const trenchPolys=trench134.map(poly=>({poly,b:polyBounds(poly)}));
     function pointInPoly(x,y,poly){ let inside=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const xi=poly[i][0]-bbox[0], yi=poly[i][1]-bbox[1], xj=poly[j][0]-bbox[0], yj=poly[j][1]-bbox[1]; const hit=((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi+1e-9)+xi); if(hit) inside=!inside; } return inside; }
     function isInTrench(x,y){ for(const t of trenchPolys){ const b=t.b; if(x+bbox[0]>=b.minx && x+bbox[0]<=b.maxx && y+bbox[1]>=b.miny && y+bbox[1]<=b.maxy && pointInPoly(x,y,t.poly)) return true; } return false; }
     function floorZAt(x,y){ return isInTrench(x,y) ? 0 : NB_THICKNESS_UM; }
-    status.textContent='v13: 3D etched trenches, rigid Nb walls, boost button, vibrate near resonators.'; setTimeout(()=>status.classList.add('hidden'),5500);
+    status.textContent='v15: 3D bandaid crossovers (146/147), green IDC pulses, scaled vibration.'; setTimeout(()=>status.classList.add('hidden'),5500);
 
     function lookDirection(){
       return new THREE.Vector3(
@@ -220,9 +265,11 @@
     }
     function forward(){ return lookDirection(); }
 
-    // vibration on resonator approach
+    // v15: vibration scales with proximity to the SQUID/qubit sites.
+    // > 300 µm: nothing. At 300 µm: slow gentle pulse. Closer: faster + stronger.
     let lastVibrate = 0;
     function pulseVibrate(t){
+      if (!navigator.vibrate) return;
       let minD = Infinity;
       for (const [cx,cy] of qubitCenters){
         const dx = state.x - cx, dy = state.y - cy;
@@ -230,10 +277,15 @@
         const d3 = Math.sqrt(dxy*dxy + state.z*state.z);
         if (d3 < minD) minD = d3;
       }
-      // strong pulse when very near, gentle when within ~600 µm
-      if (navigator.vibrate && minD < 600 && (t - lastVibrate) > 280){
-        const intensity = minD < 200 ? 80 : minD < 400 ? 45 : 25;
-        try { navigator.vibrate(intensity); } catch(e){}
+      const RANGE = 300; // µm — silence beyond this
+      if (minD > RANGE) return;
+      const f = 1 - (minD / RANGE); // 0 = far edge, 1 = right at the SQUID
+      // Pulse interval shrinks from 420 ms (at 300 µm) to 55 ms (very close).
+      // Pulse duration grows from 14 ms to 75 ms.
+      const interval = 420 - 365 * f;
+      const duration = 14 + 61 * f;
+      if (t - lastVibrate > interval){
+        try { navigator.vibrate(duration); } catch(e){}
         lastVibrate = t;
       }
     }
@@ -284,6 +336,14 @@
         h.material.opacity = 0.55 + 0.45*breath;
         const s = 1 + 0.10*breath;
         h.scale.set(s, s, 1);
+      }
+      // v15: green IDC finger pulses — faster breathing, sharper opacity swing.
+      for (const p of idcPulses){
+        const ph = p.userData.phase;
+        const pulse = 0.5 + 0.5*Math.sin(tt*5.6 + ph);
+        p.material.opacity = 0.20 + 0.80*pulse;
+        const s = 0.55 + 0.55*pulse;
+        p.scale.set(s, s, 1);
       }
       if(cardboard){
         renderer.setScissorTest(true); const w=innerWidth/2,h=innerHeight; camera.aspect=(w/h); camera.updateProjectionMatrix();
