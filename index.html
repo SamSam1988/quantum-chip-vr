@@ -3,115 +3,184 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-<title>Flying Photon VR - Superconducting Chip</title>
+<title>Flying Photon Cardboard VR - Debug Safe</title>
 <style>
-  html, body { margin:0; overflow:hidden; background:#05070a; font-family: system-ui, sans-serif; }
-  #hud { position: fixed; right: 12px; top: 12px; z-index: 10; color: #e8f3ff; background: rgba(0,0,0,.55); padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.35; min-width: 250px; }
-  #help { position: fixed; left: 12px; bottom: 12px; z-index: 10; color: #e8f3ff; background: rgba(0,0,0,.50); padding: 10px 12px; border-radius: 12px; font-size: 13px; max-width: 380px; }
-  button { cursor:pointer; border:0; border-radius:10px; padding:8px 10px; margin-top:8px; background:#dcecff; color:#04101e; font-weight:600; }
-  #crosshair { position: fixed; left: 50%; top: 50%; width: 8px; height: 8px; border:1px solid #fff; border-radius:50%; transform: translate(-50%,-50%); opacity:.65; z-index:9; pointer-events:none; }
+  html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#05070a; font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+  #hud { position:fixed; right:10px; top:10px; z-index:20; color:#e8f3ff; background:rgba(0,0,0,.65); padding:10px 12px; border-radius:12px; font-size:13px; line-height:1.35; max-width:320px; }
+  #help { position:fixed; left:10px; bottom:10px; z-index:20; color:#e8f3ff; background:rgba(0,0,0,.58); padding:10px 12px; border-radius:12px; font-size:13px; max-width:420px; }
+  button { cursor:pointer; border:0; border-radius:11px; padding:9px 12px; margin:6px 6px 0 0; background:#dcecff; color:#04101e; font-weight:700; }
+  #vrBtn { position:fixed; left:12px; top:12px; z-index:30; font-size:15px; background:#a9ffdc; }
+  #crosshair { position:fixed; left:50%; top:50%; width:10px; height:10px; border:1px solid #fff; border-radius:50%; transform:translate(-50%,-50%); opacity:.65; z-index:15; pointer-events:none; }
+  canvas { display:block; }
 </style>
 </head>
 <body>
+<button id="vrBtn">ENTER VR / CARDBOARD</button>
 <div id="crosshair"></div>
-<div id="hud">Loading chip...</div>
+<div id="hud"><b>Status</b>: page loaded; waiting for scripts...</div>
 <div id="help">
   <b>Flying photon prototype</b><br>
-  Look anywhere to fly that way. Speed = height/30 sec + 3 µm/s.<br>
-  Desktop: drag to look, WASD optional. Phone: open in Chrome, tap Enter VR/Cardboard.<br>
-  <button id="resetBtn">Reset photon</button>
+  Look anywhere to fly that way. Speed = height/30 + 3 µm/s.<br>
+  Phone: tap <b>ENTER VR / CARDBOARD</b>, allow motion/orientation if asked, rotate phone landscape, place in Cardboard.<br>
+  Desktop: drag to look. <button id="resetBtn">Reset photon</button><button id="debugBtn">Debug info</button>
 </div>
+<script>
+  function showError(msg) {
+    var hud = document.getElementById('hud');
+    hud.innerHTML = '<b style="color:#ffb0b0">Error</b><br>' + msg + '<br><br>Check that <b>index.html</b> and <b>chip-data.js</b> are both in the repo root.';
+  }
+  window.addEventListener('error', function(e){ showError(e.message || 'Unknown script error'); });
+  window.addEventListener('unhandledrejection', function(e){ showError((e.reason && e.reason.message) || String(e.reason)); });
+</script>
 <script src="./chip-data.js"></script>
-<script type="module">
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
-import { VRButton } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/webxr/VRButton.js";
-window.addEventListener("error", (e) => { document.getElementById("hud").innerHTML = "<b>Load error</b><br>" + e.message; });
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+(function(){
+  var hud = document.getElementById('hud');
+  var vrBtn = document.getElementById('vrBtn');
+  var resetBtn = document.getElementById('resetBtn');
+  var debugBtn = document.getElementById('debugBtn');
+  var cardboard = false;
+  var scene, camera, renderer, stereo, photon, data, W, H, MAX_Z, minX, minY;
+  var yaw = 0, pitch = 0, isDragging = false, lastX = 0, lastY = 0;
+  var deviceQuat = null, haveDeviceOrientation = false;
 
-const hud0 = document.getElementById("hud");
-hud0.innerHTML = "Loading chip data...";
-const data = window.CHIP_DATA;
-if (!data) throw new Error("chip-data.js did not load. Make sure chip-data.js is in the same folder as index.html and named exactly chip-data.js");
-hud0.innerHTML = "Building 3D chip...";
-const bbox = data.bbox, minX=bbox[0], minY=bbox[1], maxX=bbox[2], maxY=bbox[3];
-const W=maxX-minX, H=maxY-minY, MAX_Z=data.maxHeightUm;
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05070a);
-scene.fog = new THREE.FogExp2(0x05070a, 0.00007);
-const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.01, 30000);
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight); renderer.xr.enabled = true; document.body.appendChild(renderer.domElement);
-document.body.appendChild(VRButton.createButton(renderer));
-const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.target.set(W/2,H/2,0);
-scene.add(new THREE.HemisphereLight(0xbfdcff,0x202020,1.9));
-const sun = new THREE.DirectionalLight(0xffffff,1.1); sun.position.set(-5000,-4000,8000); scene.add(sun);
-const mats = {
-  si: new THREE.MeshStandardMaterial({color:0x5b626b, roughness:.85, metalness:0}),
-  nb: new THREE.MeshStandardMaterial({color:0x9cc7ff, roughness:.28, metalness:.75}),
-  hole: new THREE.MeshStandardMaterial({color:0x11151a, roughness:.9, metalness:0}),
-  m136: new THREE.MeshStandardMaterial({color:0xffcc66, roughness:.32, metalness:.65}),
-  m137: new THREE.MeshStandardMaterial({color:0xff8a65, roughness:.32, metalness:.65}),
-  d146: new THREE.MeshStandardMaterial({color:0x7ee7ff, transparent:true, opacity:.48, roughness:.2, metalness:0}),
-  d147: new THREE.MeshStandardMaterial({color:0xd89cff, transparent:true, opacity:.48, roughness:.2, metalness:0}),
-  aux: new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true, transparent:true, opacity:.35})
-};
-function toLocal(p){ return [p[0]-minX, p[1]-minY]; }
-function makeShape(rec){
-  const outer = rec.outer.map(toLocal); const s = new THREE.Shape();
-  outer.forEach((p,i)=> i? s.lineTo(p[0],p[1]) : s.moveTo(p[0],p[1])); s.closePath();
-  (rec.holes||[]).forEach(h=>{ const hp=h.map(toLocal); const path=new THREE.Path(); hp.forEach((p,i)=> i? path.lineTo(p[0],p[1]) : path.moveTo(p[0],p[1])); path.closePath(); s.holes.push(path); });
-  return s;
-}
-function addExtruded(records, z, depth, mat, name){
-  const group = new THREE.Group(); group.name=name;
-  records.forEach(rec=>{ try { const geo = new THREE.ExtrudeGeometry(makeShape(rec), {depth:depth, bevelEnabled:false}); geo.rotateX(0); const mesh = new THREE.Mesh(geo, mat); mesh.position.z=z; group.add(mesh); } catch(e){} });
-  scene.add(group); return group;
-}
-function layerRecords(layer){ return (data.layers[layer]||[]).map(poly=>({outer:poly, holes:[]})); }
-// Silicon block: top surface at z=0, body below.
-const siGeo = new THREE.BoxGeometry(W,H,500); const si = new THREE.Mesh(siGeo, mats.si); si.position.set(W/2,H/2,-250); scene.add(si);
-// Nb sheet with etched openings.
-addExtruded(data.nbSheet, 0, .2, mats.nb, 'continuous 200 nm Nb minus layer 134');
-// show etched opening floors slightly dark.
-addExtruded(layerRecords('134'), 0.002, .006, mats.hole, 'Nb etched openings');
-addExtruded(layerRecords('136'), .2, .13, mats.m136, 'layer 136 added Nb');
-addExtruded(layerRecords('137'), .33, .13, mats.m137, 'layer 137 added Nb');
-addExtruded(layerRecords('146'), .46, .25, mats.d146, 'dielectric crossover 146');
-addExtruded(layerRecords('147'), .72, .25, mats.d147, 'dielectric crossover 147');
-addExtruded(layerRecords('131'), .95, .04, mats.aux, 'aux layer 131');
-// grid and boundary
-const grid = new THREE.GridHelper(Math.max(W,H), 40, 0x35516b, 0x1a2735); grid.position.set(W/2,H/2,0.001); grid.rotation.x=Math.PI/2; scene.add(grid);
-const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W,H,MAX_Z)), new THREE.LineBasicMaterial({color:0x3c7cff, transparent:true, opacity:.25})); edges.position.set(W/2,H/2,MAX_Z/2); scene.add(edges);
-// photon marker
-const photon = new THREE.Mesh(new THREE.SphereGeometry(2.5,24,12), new THREE.MeshBasicMaterial({color:0xffffaa})); scene.add(photon);
-let keys={}; addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true); addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
-function reset(){ camera.position.set(W/2, H/2, 1500); controls.target.set(W/2+1,H/2,1500); }
-document.getElementById('resetBtn').onclick=reset; reset();
-let last=performance.now(); const hud=document.getElementById('hud');
-function animate(now){
-  const dt=Math.min((now-last)/1000, .08); last=now;
-  controls.update();
-  const dir = new THREE.Vector3(); camera.getWorldDirection(dir).normalize();
-  const height=Math.max(0, camera.position.z); const speed=height/30 + 3;
-  camera.position.addScaledVector(dir, speed*dt);
-  // optional desktop nudges
-  const right=new THREE.Vector3().crossVectors(dir,camera.up).normalize();
-  if(keys['w']) camera.position.addScaledVector(dir, speed*dt*8);
-  if(keys['s']) camera.position.addScaledVector(dir, -speed*dt*8);
-  if(keys['a']) camera.position.addScaledVector(right, -speed*dt*8);
-  if(keys['d']) camera.position.addScaledVector(right, speed*dt*8);
-  camera.position.x=THREE.MathUtils.clamp(camera.position.x,0,W);
-  camera.position.y=THREE.MathUtils.clamp(camera.position.y,0,H);
-  camera.position.z=THREE.MathUtils.clamp(camera.position.z,0.05,MAX_Z);
-  photon.position.copy(camera.position).addScaledVector(dir,12);
-  hud.innerHTML = `<b>Velocity</b>: ${speed.toFixed(2)} µm/s<br>`+
-    `<b>Position</b>: x=${camera.position.x.toFixed(1)} µm, y=${camera.position.y.toFixed(1)} µm, z=${camera.position.z.toFixed(1)} µm<br>`+
-    `<b>Height above chip</b>: ${height.toFixed(1)} µm<br>`+
-    `<b>Layers</b>: Si 500 µm; Nb 200 nm; 136/137 +130 nm; 146/147 dielectric crossovers`;
-  renderer.render(scene,camera);
-}
-renderer.setAnimationLoop(animate);
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+  function requireBasics(){
+    if (!window.CHIP_DATA) throw new Error('chip-data.js did not load. It must be named exactly chip-data.js and sit beside index.html.');
+    if (!window.THREE) throw new Error('Three.js failed to load from CDN. Try Chrome/Safari online, not a local file.');
+  }
+  function toLocal(p){ return [p[0]-minX, p[1]-minY]; }
+  function makeShape(poly){
+    var outer = poly.map(toLocal);
+    var s = new THREE.Shape();
+    outer.forEach(function(p,i){ if(i) s.lineTo(p[0],p[1]); else s.moveTo(p[0],p[1]); });
+    s.closePath();
+    return s;
+  }
+  function addExtruded(polys, z, depth, mat, name, limit){
+    var group = new THREE.Group(); group.name = name;
+    var n = Math.min(polys.length, limit || polys.length);
+    for (var i=0; i<n; i++) {
+      try {
+        var geo = new THREE.ExtrudeGeometry(makeShape(polys[i]), { depth: depth, bevelEnabled:false, curveSegments: 1 });
+        var mesh = new THREE.Mesh(geo, mat);
+        mesh.position.z = z;
+        group.add(mesh);
+      } catch(e) { /* skip bad polygons */ }
+    }
+    scene.add(group);
+    return group;
+  }
+  function init(){
+    requireBasics();
+    data = window.CHIP_DATA;
+    minX = data.bbox[0]; minY = data.bbox[1]; W = data.bbox[2]-data.bbox[0]; H = data.bbox[3]-data.bbox[1]; MAX_Z = data.maxHeightUm || 10000;
+    hud.innerHTML = '<b>Status</b>: building chip geometry...';
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05070a);
+    scene.fog = new THREE.FogExp2(0x05070a, 0.00007);
+    camera = new THREE.PerspectiveCamera(72, window.innerWidth/window.innerHeight, 0.05, 40000);
+    renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    stereo = new THREE.StereoCamera(); stereo.eyeSep = 2.5;
+
+    scene.add(new THREE.HemisphereLight(0xbfdcff, 0x202020, 1.8));
+    var sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(-5000,-4000,8000); scene.add(sun);
+
+    var mats = {
+      si: new THREE.MeshStandardMaterial({color:0x5b626b, roughness:.85, metalness:0}),
+      nb: new THREE.MeshStandardMaterial({color:0x9cc7ff, roughness:.28, metalness:.75}),
+      hole: new THREE.MeshStandardMaterial({color:0x101318, roughness:.95, metalness:0}),
+      m136: new THREE.MeshStandardMaterial({color:0xffcc66, roughness:.32, metalness:.65}),
+      m137: new THREE.MeshStandardMaterial({color:0xff8a65, roughness:.32, metalness:.65}),
+      d146: new THREE.MeshStandardMaterial({color:0x7ee7ff, transparent:true, opacity:.50, roughness:.2, metalness:0}),
+      d147: new THREE.MeshStandardMaterial({color:0xd89cff, transparent:true, opacity:.50, roughness:.2, metalness:0}),
+      aux: new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true, transparent:true, opacity:.35})
+    };
+
+    var si = new THREE.Mesh(new THREE.BoxGeometry(W,H,500), mats.si); si.position.set(W/2,H/2,-250); scene.add(si);
+    if (data.nbSheet) addExtruded(data.nbSheet, 0, .2, mats.nb, 'continuous 200 nm Nb');
+    addExtruded(data.layers['134'] || [], .002, .006, mats.hole, 'Nb etched openings');
+    addExtruded(data.layers['136'] || [], .2, .13, mats.m136, 'layer 136 Nb');
+    addExtruded(data.layers['137'] || [], .33, .13, mats.m137, 'layer 137 Nb');
+    addExtruded(data.layers['146'] || [], .46, .25, mats.d146, 'dielectric crossover 146');
+    addExtruded(data.layers['147'] || [], .72, .25, mats.d147, 'dielectric crossover 147');
+    addExtruded(data.layers['131'] || [], .95, .04, mats.aux, 'aux layer 131');
+
+    var grid = new THREE.GridHelper(Math.max(W,H), 40, 0x35516b, 0x1a2735); grid.position.set(W/2,H/2,0.001); grid.rotation.x = Math.PI/2; scene.add(grid);
+    var box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W,H,MAX_Z)), new THREE.LineBasicMaterial({color:0x3c7cff, transparent:true, opacity:.28})); box.position.set(W/2,H/2,MAX_Z/2); scene.add(box);
+    photon = new THREE.Mesh(new THREE.SphereGeometry(2.5,24,12), new THREE.MeshBasicMaterial({color:0xffffaa})); scene.add(photon);
+
+    reset(); bindControls(); requestAnimationFrame(loop);
+  }
+  function reset(){ if (camera) { camera.position.set(W/2, H/2, 1500); yaw = 0; pitch = 0; camera.rotation.set(0,0,0,'YXZ'); } }
+  function bindControls(){
+    resetBtn.onclick = reset;
+    debugBtn.onclick = function(){ alert('chip-data: ' + (!!window.CHIP_DATA) + '\nTHREE: ' + (!!window.THREE) + '\nCardboard mode: ' + cardboard + '\nDevice orientation: ' + haveDeviceOrientation + '\nPage URL: ' + location.href); };
+    vrBtn.onclick = function(){
+      cardboard = !cardboard;
+      vrBtn.textContent = cardboard ? 'EXIT VR' : 'ENTER VR / CARDBOARD';
+      if (cardboard && document.body.requestFullscreen) document.body.requestFullscreen().catch(function(){});
+      if (cardboard && window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(function(state){ if (state !== 'granted') showError('Motion/orientation permission was not granted. You can still drag to look on desktop.'); }).catch(function(){});
+      }
+    };
+    window.addEventListener('resize', resize);
+    renderer.domElement.addEventListener('pointerdown', function(e){ isDragging=true; lastX=e.clientX; lastY=e.clientY; });
+    window.addEventListener('pointerup', function(){ isDragging=false; });
+    window.addEventListener('pointermove', function(e){ if(!isDragging) return; yaw -= (e.clientX-lastX)*0.005; pitch -= (e.clientY-lastY)*0.005; pitch = Math.max(-1.45, Math.min(1.45, pitch)); lastX=e.clientX; lastY=e.clientY; });
+    window.addEventListener('deviceorientation', function(event){
+      if (event.alpha == null) return;
+      haveDeviceOrientation = true;
+      var alpha = THREE.MathUtils.degToRad(event.alpha || 0);
+      var beta = THREE.MathUtils.degToRad(event.beta || 0);
+      var gamma = THREE.MathUtils.degToRad(event.gamma || 0);
+      var euler = new THREE.Euler(beta, alpha, -gamma, 'YXZ');
+      deviceQuat = new THREE.Quaternion().setFromEuler(euler);
+    }, true);
+  }
+  function resize(){
+    camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+  var last = performance.now();
+  function updateCameraOrientation(){
+    if (cardboard && deviceQuat) camera.quaternion.copy(deviceQuat);
+    else camera.rotation.set(pitch, yaw, 0, 'YXZ');
+  }
+  function loop(now){
+    requestAnimationFrame(loop);
+    var dt = Math.min((now-last)/1000, .08); last = now;
+    updateCameraOrientation();
+    var dir = new THREE.Vector3(); camera.getWorldDirection(dir).normalize();
+    var height = Math.max(0, camera.position.z);
+    var speed = height/30 + 3;
+    camera.position.addScaledVector(dir, speed*dt);
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, 0, W);
+    camera.position.y = THREE.MathUtils.clamp(camera.position.y, 0, H);
+    camera.position.z = THREE.MathUtils.clamp(camera.position.z, 0.05, MAX_Z);
+    photon.position.copy(camera.position).addScaledVector(dir, 12);
+    hud.innerHTML = '<b>Velocity</b>: ' + speed.toFixed(2) + ' µm/s<br>' +
+      '<b>Position</b>: x=' + camera.position.x.toFixed(1) + ' µm, y=' + camera.position.y.toFixed(1) + ' µm, z=' + camera.position.z.toFixed(1) + ' µm<br>' +
+      '<b>Height above chip</b>: ' + height.toFixed(1) + ' µm<br>' +
+      '<b>Mode</b>: ' + (cardboard ? 'Cardboard split-screen' : 'normal') + '<br>' +
+      '<b>Layers</b>: Si 500 µm; Nb 200 nm; 136/137 +130 nm; 146/147 dielectric';
+    if (cardboard) renderStereo(); else { renderer.setScissorTest(false); renderer.render(scene,camera); }
+  }
+  function renderStereo(){
+    var w = window.innerWidth, h = window.innerHeight;
+    stereo.update(camera);
+    renderer.setScissorTest(true);
+    renderer.clear();
+    renderer.setViewport(0,0,w/2,h); renderer.setScissor(0,0,w/2,h); renderer.render(scene, stereo.cameraL);
+    renderer.setViewport(w/2,0,w/2,h); renderer.setScissor(w/2,0,w/2,h); renderer.render(scene, stereo.cameraR);
+    renderer.setScissorTest(false);
+  }
+  setTimeout(function(){ try { init(); } catch(e) { showError(e.message); } }, 0);
+})();
 </script>
 </body>
 </html>
