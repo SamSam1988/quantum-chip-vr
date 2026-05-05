@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v17</title>
+  <title>Quantum Chip Photon VR v18</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#030609;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     #ui{position:fixed;left:8px;top:8px;z-index:10;display:flex;gap:5px;flex-wrap:wrap;max-width:92vw}
@@ -22,10 +22,9 @@
     #hud .arc{position:absolute;left:6px;top:2px;width:52px;height:26px;border:2px solid rgba(221,232,255,.28);border-bottom:0;border-radius:52px 52px 0 0}
     #hud .needle{position:absolute;left:31px;bottom:0;width:2px;height:16px;background:#59ffc0;border-radius:3px;transform-origin:50% 100%;transform:rotate(-82deg);box-shadow:0 0 6px rgba(89,255,192,.7)}
     #hud #altNeedle{background:#ffd166;box-shadow:0 0 6px rgba(255,209,102,.7)}
-    #hud canvas{border-radius:4px;background:rgba(0,0,0,.55);display:block;margin:2px auto 0}
-    #hud .logo-cell img{max-width:64px;max-height:38px;display:block;margin:2px auto 2px;object-fit:contain}
+    #hud .logo-cell{width:auto;display:flex;align-items:center;justify-content:center;padding:0 4px}
+    #hud .logo-cell img{height:60px;max-height:60px;width:auto;display:block;object-fit:contain}
     #hud .logo-cell img.hidden{display:none}
-    #hud .logo-cell .brand{font-size:11px;font-weight:800;letter-spacing:.14em;color:#dde8ff;margin-top:2px}
     #status{position:fixed;right:8px;top:8px;z-index:10;background:rgba(0,0,0,.62);padding:8px 10px;border-radius:8px;font-size:11px;transition:opacity .7s ease}
     #status.hidden{opacity:0;pointer-events:none}
     #center{position:fixed;left:50%;top:50%;width:10px;height:10px;margin-left:-5px;margin-top:-5px;border:1px solid rgba(255,255,255,.7);border-radius:50%;z-index:9;pointer-events:none}
@@ -55,13 +54,8 @@
       <div class="unit">µm</div>
       <div class="gauge"><div class="arc"></div><div id="altNeedle" class="needle"></div></div>
     </div>
-    <div class="cell">
-      <div class="lbl">map</div>
-      <canvas id="miniMap" width="76" height="76"></canvas>
-    </div>
     <div class="cell logo-cell">
       <img id="logo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.classList.add('hidden')" />
-      <div class="brand">Basil</div>
     </div>
   </div>
   <div id="center"></div>
@@ -71,9 +65,7 @@
   (()=>{
     const status=document.getElementById('status'), hud=document.getElementById('hud'),
           speedValue=document.getElementById('speedValue'), needle=document.getElementById('needle'),
-          altValue=document.getElementById('altValue'), altNeedle=document.getElementById('altNeedle'),
-          miniMap=document.getElementById('miniMap'), mctx=miniMap.getContext('2d');
-    const MAP_W=miniMap.width, MAP_H=miniMap.height;
+          altValue=document.getElementById('altValue'), altNeedle=document.getElementById('altNeedle');
     let running=false, cardboard=false, motion=false, boost=false;
     let yaw=0, pitch=-0.42, targetYaw=0, targetPitch=-0.42, lastT=performance.now();
     let initialOri=null, currentOri=null;
@@ -290,49 +282,6 @@
     }
     function forward(){ return lookDirection(); }
 
-    // v17: mini-map of the chip with photon position + view cone.
-    function drawMiniMap(){
-      const PAD = 3;
-      mctx.clearRect(0,0,MAP_W,MAP_H);
-      mctx.fillStyle = 'rgba(15,22,38,.95)';
-      mctx.fillRect(0,0,MAP_W,MAP_H);
-      // chip border
-      mctx.strokeStyle = '#88aaff';
-      mctx.lineWidth = 1;
-      mctx.strokeRect(PAD+0.5,PAD+0.5,MAP_W-2*PAD-1,MAP_H-2*PAD-1);
-      // chip-to-map mapping (chip y is up; canvas y is down → flip)
-      const mx = (cx,cy) => [
-        PAD + (cx/chipUm.w) * (MAP_W-2*PAD),
-        MAP_H - (PAD + (cy/chipUm.h) * (MAP_H-2*PAD))
-      ];
-      // qubit dots
-      mctx.fillStyle = '#ff66ee';
-      for (const [cx,cy] of qubitCenters){
-        const [px,py] = mx(cx,cy);
-        mctx.beginPath(); mctx.arc(px,py,1.6,0,Math.PI*2); mctx.fill();
-      }
-      // view-cone area (where the photon is currently looking on the chip plane)
-      const [px,py] = mx(state.x, state.y);
-      const fovHalf = 35 * Math.PI/180;
-      const viewLen = 18;
-      // heading is the yaw angle (camera direction projected on chip XY plane)
-      mctx.fillStyle = 'rgba(89,255,192,.32)';
-      mctx.strokeStyle = 'rgba(89,255,192,.85)';
-      mctx.lineWidth = 1;
-      mctx.beginPath();
-      mctx.moveTo(px,py);
-      mctx.lineTo(px + Math.sin(yaw - fovHalf) * viewLen, py - Math.cos(yaw - fovHalf) * viewLen);
-      mctx.lineTo(px + Math.sin(yaw + fovHalf) * viewLen, py - Math.cos(yaw + fovHalf) * viewLen);
-      mctx.closePath();
-      mctx.fill(); mctx.stroke();
-      // photon dot
-      mctx.fillStyle = '#59ffc0';
-      mctx.beginPath(); mctx.arc(px,py,2.4,0,Math.PI*2); mctx.fill();
-      mctx.strokeStyle = 'rgba(0,0,0,.5)';
-      mctx.lineWidth = 0.7;
-      mctx.stroke();
-    }
-
     // v15: vibration scales with proximity to the SQUID/qubit sites.
     // > 300 µm: nothing. At 300 µm: slow gentle pulse. Closer: faster + stronger.
     let lastVibrate = 0;
@@ -402,7 +351,6 @@
       const altFrac = Math.max(0, Math.min(1, state.z / maxZ));
       altValue.textContent = state.z.toFixed(0);
       altNeedle.style.transform = `rotate(${-82 + 164*altFrac}deg)`;
-      drawMiniMap();
       const tt=t/1000;
       for (const h of halos){
         const breath = 0.55 + 0.45*Math.sin(tt*2.4 + h.userData.phase);
