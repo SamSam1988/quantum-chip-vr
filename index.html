@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v15</title>
+  <title>Quantum Chip Photon VR v16</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#030609;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     #ui{position:fixed;left:10px;top:10px;z-index:10;display:flex;gap:8px;flex-wrap:wrap;max-width:92vw}
@@ -209,8 +209,7 @@
       haloGroup.add(mesh); halos.push(mesh);
     });
 
-    // ---- v15: green pulses inside the interdigitated capacitors.
-    // Each qubit site has a row of bright-green flares spread across the IDC fingers.
+    // ---- v16: ONE green sinusoidal glow per SQUID. No runway / no row of dots.
     function makeGreenTex(){
       const cv = document.createElement('canvas'); cv.width=cv.height=256;
       const cg = cv.getContext('2d');
@@ -225,20 +224,13 @@
     const greenTex = makeGreenTex();
     const idcGroup = new THREE.Group(); scene.add(idcGroup);
     const idcPulses = [];
-    qubitCenters.forEach(([cx,cy], qi)=>{
-      // Interleave 9 fingers across the IDC body of each qubit (~280 µm wide)
-      const N = 9;
-      const spanUm = 280;
-      const yOffsetUm = ((qi % 2) ? -36 : 36); // alternate sides so fingers fan out from the qubit pad
-      for (let k=0; k<N; k++){
-        const offX = (k - (N-1)/2) * (spanUm/(N-1));
-        const sizeUm = 95;
-        const mat = new THREE.MeshBasicMaterial({map: greenTex, transparent:true, depthWrite:false, blending: THREE.AdditiveBlending});
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeUm/UM_PER_UNIT, sizeUm/UM_PER_UNIT), mat);
-        mesh.position.set((cx + offX - chipUm.w/2)/UM_PER_UNIT, (cy + yOffsetUm - chipUm.h/2)/UM_PER_UNIT, nbHeight + 0.0008);
-        mesh.userData = {phase: qi*0.6 + k*0.42, base: sizeUm/UM_PER_UNIT};
-        idcGroup.add(mesh); idcPulses.push(mesh);
-      }
+    qubitCenters.forEach(([cx,cy])=>{
+      const sizeUm = 220; // single glow disc per SQUID
+      const mat = new THREE.MeshBasicMaterial({map: greenTex, transparent:true, depthWrite:false, blending: THREE.AdditiveBlending});
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeUm/UM_PER_UNIT, sizeUm/UM_PER_UNIT), mat);
+      mesh.position.set((cx-chipUm.w/2)/UM_PER_UNIT, (cy-chipUm.h/2)/UM_PER_UNIT, nbHeight + 0.0008);
+      mesh.userData = {base: sizeUm/UM_PER_UNIT};
+      idcGroup.add(mesh); idcPulses.push(mesh);
     });
 
     // ---- floor: photon hovers on Nb at z=NB_THICKNESS_UM, dips to z=0 inside layer-134 etched openings.
@@ -337,12 +329,12 @@
         const s = 1 + 0.10*breath;
         h.scale.set(s, s, 1);
       }
-      // v15: green IDC finger pulses — faster breathing, sharper opacity swing.
+      // v16: every SQUID glow breathes sinusoidally with the same shared phase.
+      // Just amplitude grow → drop → grow → drop. No runway sequencing.
+      const squidPulse = 0.5 + 0.5*Math.sin(tt*1.6);
       for (const p of idcPulses){
-        const ph = p.userData.phase;
-        const pulse = 0.5 + 0.5*Math.sin(tt*5.6 + ph);
-        p.material.opacity = 0.20 + 0.80*pulse;
-        const s = 0.55 + 0.55*pulse;
+        p.material.opacity = 0.10 + 0.90*squidPulse;
+        const s = 0.55 + 0.55*squidPulse;
         p.scale.set(s, s, 1);
       }
       if(cardboard){
