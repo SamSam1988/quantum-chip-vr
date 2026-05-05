@@ -9,7 +9,13 @@
     #ui{position:fixed;left:10px;top:10px;z-index:10;display:flex;gap:8px;flex-wrap:wrap;max-width:92vw}
     button{border:0;border-radius:12px;padding:12px 14px;font-weight:800;font-size:14px;background:#59ffc0;color:#02110c;box-shadow:0 0 18px rgba(89,255,192,.35)}
     button.secondary{background:#ffe16b;color:#100d00} button.dark{background:#dde8ff;color:#06101f}
-    #hud{position:fixed;left:10px;bottom:10px;z-index:10;background:rgba(0,0,0,.62);padding:12px 14px;border-radius:12px;line-height:1.35;min-width:270px;font-size:13px}
+    #hud{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:10;background:rgba(0,0,0,.72);padding:10px 16px;border-radius:22px;min-width:260px;font-size:13px;text-align:center;border:1px solid rgba(255,255,255,.15);box-shadow:0 0 24px rgba(89,255,192,.14)}
+    #speedLabel{font-size:12px;opacity:.78;text-transform:uppercase;letter-spacing:.09em}
+    #speedValue{font-size:34px;font-weight:900;line-height:1.0;margin:2px 0}
+    #speedUnit{font-size:12px;opacity:.8}
+    #gauge{position:relative;width:230px;height:56px;margin:4px auto 0;overflow:hidden}
+    #arc{position:absolute;left:15px;top:4px;width:200px;height:100px;border:7px solid rgba(221,232,255,.28);border-bottom:0;border-radius:200px 200px 0 0}
+    #needle{position:absolute;left:113px;bottom:1px;width:4px;height:52px;background:#59ffc0;border-radius:4px;transform-origin:50% 100%;transform:rotate(-82deg);box-shadow:0 0 12px rgba(89,255,192,.7)}
     #status{position:fixed;right:10px;top:10px;z-index:10;background:rgba(0,0,0,.62);padding:10px 12px;border-radius:10px;font-size:13px}
     #center{position:fixed;left:50%;top:50%;width:10px;height:10px;margin-left:-5px;margin-top:-5px;border:1px solid rgba(255,255,255,.7);border-radius:50%;z-index:9;pointer-events:none}
     canvas{display:block}
@@ -21,15 +27,16 @@
     <button class="secondary" id="motionBtn">ENABLE PHONE MOTION</button>
     <button class="dark" id="cardboardBtn">CARDBOARD SPLIT: OFF</button>
     <button class="dark" id="resetBtn">RESET</button>
+    <button class="dark" id="fullBtn">FULL SCREEN</button>
   </div>
   <div id="status">Loading real GDS texture...</div>
-  <div id="hud">Position: —<br>Velocity: —<br>Mode: single screen</div>
+  <div id="hud"><div id="speedLabel">photon speed</div><div id="speedValue">—</div><div id="speedUnit">µm/s</div><div id="gauge"><div id="arc"></div><div id="needle"></div></div></div>
   <div id="center"></div>
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
   <script src="chip-data.js"></script>
   <script>
   (()=>{
-    const status=document.getElementById('status'), hud=document.getElementById('hud');
+    const status=document.getElementById('status'), hud=document.getElementById('hud'), speedValue=document.getElementById('speedValue'), needle=document.getElementById('needle');
     let running=false, cardboard=false, motion=false;
     let yaw=0, pitch=-0.45, targetYaw=0, targetPitch=-0.45, lastT=performance.now();
     let initialOri=null, currentOri=null;
@@ -38,11 +45,11 @@
     const chipUm={w:bbox[2]-bbox[0], h:bbox[3]-bbox[1]};
     const UM_PER_UNIT=1000; // Three.js world unit = 1000 microns
     const chipW=chipUm.w/UM_PER_UNIT, chipH=chipUm.h/UM_PER_UNIT;
-    const maxZ=10000, minZ=5;
+    const maxZ=10000, minZ=0;
     const state={x:chipUm.w/2, y:chipUm.h/2, z:1500};
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x030609);
     const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.002, 80);
-    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
+    const renderer=new THREE.WebGLRenderer({antialias:false,alpha:false,powerPreference:'high-performance'});
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
     scene.add(new THREE.HemisphereLight(0xffffff,0x445566,1.25));
     const dirLight=new THREE.DirectionalLight(0xffffff,1.2); dirLight.position.set(2,5,3); scene.add(dirLight);
@@ -69,8 +76,8 @@
       g.fillStyle='rgba(255,255,255,.75)'; g.font='36px system-ui'; g.fillText('Real GDS layout texture: layers 134, 136, 137, 146, 147',40,70);
       return new THREE.CanvasTexture(c);
     }
-    const topMat=new THREE.MeshStandardMaterial({map:makeTexture(),roughness:.5,metalness:.45});
-    const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat); top.position.z=0.003; scene.add(top);
+    const topMat=new THREE.MeshBasicMaterial({map:makeTexture(),side:THREE.DoubleSide});
+    const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat); top.position.z=0.012; scene.add(top);
     const edge=new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({color:0x88aaff,transparent:true,opacity:.35})); edge.position.copy(base.position); scene.add(edge);
     status.textContent='Ready: real geometry is drawn as a stable texture.';
     function updateCamera(){
@@ -86,9 +93,9 @@
         targetYaw=-da; targetPitch=(currentOri.beta-initialOri.beta)*Math.PI/180 - .45;
       }
       updateCamera();
-      if(running){ const v=state.z/30+3; const f=forward(); state.x += f.x*v*dt; state.y += f.y*v*dt; state.z += f.z*v*dt;
+      if(running){ const v=state.z/10+9; const f=forward(); state.x += f.x*v*dt; state.y += f.y*v*dt; state.z += f.z*v*dt;
         state.x=Math.max(0,Math.min(chipUm.w,state.x)); state.y=Math.max(0,Math.min(chipUm.h,state.y)); state.z=Math.max(minZ,Math.min(maxZ,state.z)); }
-      const v=state.z/30+3; hud.innerHTML=`Position: x ${state.x.toFixed(1)} µm, y ${state.y.toFixed(1)} µm, z ${state.z.toFixed(1)} µm<br>Velocity: ${v.toFixed(2)} µm/s<br>Mode: ${cardboard?'Cardboard split':'single screen'}${motion?' + phone motion':''}`;
+      const v=state.z/10+9; speedValue.textContent=v.toFixed(1); const maxSpeed=maxZ/10+9; const angle=-82+164*Math.max(0,Math.min(1,v/maxSpeed)); needle.style.transform=`rotate(${angle}deg)`;
       if(cardboard){
         renderer.setScissorTest(true); const w=innerWidth/2,h=innerHeight; camera.aspect=(w/h); camera.updateProjectionMatrix();
         renderer.setViewport(0,0,w,h); renderer.setScissor(0,0,w,h); renderer.render(scene,camera);
@@ -103,6 +110,7 @@
     document.getElementById('startBtn').onclick=()=>{ running=!running; document.getElementById('startBtn').textContent=running?'PAUSE':'START FLYING'; };
     document.getElementById('cardboardBtn').onclick=()=>{ cardboard=!cardboard; document.getElementById('cardboardBtn').textContent='CARDBOARD SPLIT: '+(cardboard?'ON':'OFF'); };
     document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=1500; targetYaw=yaw=0; targetPitch=pitch=-0.45; initialOri=currentOri; };
+    document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.textContent='Fullscreen unavailable: '+err.message; } };
     document.getElementById('motionBtn').onclick=async()=>{ try{ if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){ const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted'){status.textContent='Phone motion permission denied.'; return;} } motion=true; initialOri=currentOri||{alpha:0,beta:0,gamma:0}; status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.'; }catch(err){ status.textContent='Motion error: '+err.message; } };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
   })();
