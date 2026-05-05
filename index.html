@@ -39,7 +39,7 @@
   (()=>{
     const status=document.getElementById('status'), hud=document.getElementById('hud'), speedValue=document.getElementById('speedValue'), needle=document.getElementById('needle');
     let running=false, cardboard=false, motion=false;
-    let yaw=0, pitch=-0.35, targetYaw=0, targetPitch=-0.35, lastT=performance.now();
+    let yaw=0, pitch=-0.42, targetYaw=0, targetPitch=-0.42, lastT=performance.now();
     let initialOri=null, currentOri=null;
     const data=window.CHIP_DATA || {bbox:[0,0,10000,10000],layers:{}};
     const bbox=data.bbox || [0,0,10000,10000];
@@ -50,6 +50,9 @@
     const state={x:chipUm.w/2, y:chipUm.h/2, z:2200}; // start clearly above the surface
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x030609);
     const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.002, 80);
+    // Use physics/CAD axes: chip lies in X-Y plane, height is Z.
+    // The camera optical axis is horizontal at pitch=0, not straight down.
+    camera.up.set(0,0,1);
     const renderer=new THREE.WebGLRenderer({antialias:false,alpha:false,powerPreference:'high-performance'});
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
     scene.add(new THREE.HemisphereLight(0xffffff,0x445566,1.25));
@@ -86,18 +89,35 @@
     const topMat=new THREE.MeshBasicMaterial({map:makeTexture(),side:THREE.DoubleSide});
     const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat); top.position.z=0.002; scene.add(top);
     const edge=new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({color:0x88aaff,transparent:true,opacity:.35})); edge.position.copy(base.position); scene.add(edge);
-    status.textContent='Ready: start above the 500 µm Si chip; Nb/GDS texture is on top.'; setTimeout(()=>status.classList.add('hidden'),5000);
+    status.textContent='Ready: chip is in the X-Y plane, height is Z; you start above the Nb surface.'; setTimeout(()=>status.classList.add('hidden'),5000);
+    function lookDirection(){
+      // CAD/physics coordinates: X and Y are chip-plane axes, Z is height.
+      // yaw rotates within the chip plane; pitch controls up/down.
+      // pitch=0 looks horizontally across the chip, pitch<0 looks down at Nb surface.
+      return new THREE.Vector3(
+        Math.sin(yaw)*Math.cos(pitch),
+        Math.cos(yaw)*Math.cos(pitch),
+        Math.sin(pitch)
+      ).normalize();
+    }
     function updateCamera(){
-      yaw += (targetYaw-yaw)*0.12; pitch += (targetPitch-pitch)*0.12; pitch=Math.max(-1.45,Math.min(1.45,pitch));
+      yaw += (targetYaw-yaw)*0.12; pitch += (targetPitch-pitch)*0.12; pitch=Math.max(-1.35,Math.min(1.25,pitch));
       const wx=(state.x-chipUm.w/2)/UM_PER_UNIT, wy=(state.y-chipUm.h/2)/UM_PER_UNIT, wz=state.z/UM_PER_UNIT;
       camera.position.set(wx,wy,wz);
-      camera.rotation.order='YXZ'; camera.rotation.y=yaw; camera.rotation.x=pitch; camera.rotation.z=0;
+      const d=lookDirection();
+      camera.lookAt(camera.position.x+d.x, camera.position.y+d.y, camera.position.z+d.z);
     }
-    function forward(){ return new THREE.Vector3(0,0,-1).applyEuler(camera.rotation).normalize(); }
+    function forward(){ return lookDirection(); }
     function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
       if(motion && currentOri && initialOri){
         let da=(currentOri.alpha-initialOri.alpha)*Math.PI/180; if(da>Math.PI)da-=2*Math.PI; if(da<-Math.PI)da+=2*Math.PI;
-        targetYaw=-da; targetPitch=(currentOri.beta-initialOri.beta)*Math.PI/180 - .45;
+        targetYaw=-da;
+        // Landscape phones report pitch mostly through gamma; portrait mostly through beta.
+        // Choose the stronger tilt signal so tipping the phone downward reveals the XY chip below.
+        const db=(currentOri.beta-initialOri.beta)*Math.PI/180;
+        const dg=(currentOri.gamma-initialOri.gamma)*Math.PI/180;
+        const tilt=Math.abs(dg)>Math.abs(db)*0.6 ? -dg : db;
+        targetPitch=tilt - .42;
       }
       updateCamera();
       if(running){ const v=state.z/10+9; const f=forward(); state.x += f.x*v*dt; state.y += f.y*v*dt; state.z += f.z*v*dt;
@@ -116,7 +136,7 @@
     addEventListener('deviceorientation',e=>{ currentOri={alpha:e.alpha||0,beta:e.beta||0,gamma:e.gamma||0}; }, true);
     document.getElementById('startBtn').onclick=()=>{ running=!running; document.getElementById('startBtn').textContent=running?'PAUSE':'START FLYING'; };
     document.getElementById('cardboardBtn').onclick=()=>{ cardboard=!cardboard; document.getElementById('cardboardBtn').textContent='CARDBOARD SPLIT: '+(cardboard?'ON':'OFF'); };
-    document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200; targetYaw=yaw=0; targetPitch=pitch=-0.35; initialOri=currentOri; };
+    document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200; targetYaw=yaw=0; targetPitch=pitch=-0.42; initialOri=currentOri; };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
     document.getElementById('motionBtn').onclick=async()=>{ try{ if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){ const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted'){status.classList.remove('hidden'); status.textContent='Phone motion permission denied.'; return;} } motion=true; initialOri=currentOri||{alpha:0,beta:0,gamma:0}; status.classList.remove('hidden'); status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.'; setTimeout(()=>status.classList.add('hidden'),5000); }catch(err){ status.classList.remove('hidden'); status.textContent='Motion error: '+err.message; } };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
