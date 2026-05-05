@@ -3,12 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v12</title>
+  <title>Quantum Chip Photon VR v13</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#030609;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     #ui{position:fixed;left:10px;top:10px;z-index:10;display:flex;gap:8px;flex-wrap:wrap;max-width:92vw}
     button{border:0;border-radius:12px;padding:12px 14px;font-weight:800;font-size:14px;background:#59ffc0;color:#02110c;box-shadow:0 0 18px rgba(89,255,192,.35)}
     button.secondary{background:#ffe16b;color:#100d00} button.dark{background:#dde8ff;color:#06101f}
+    button.boost{background:#ff7a3d;color:#1b0a00;box-shadow:0 0 18px rgba(255,122,61,.45)}
+    button.boost.active{background:#ff3d3d;color:#fff;box-shadow:0 0 24px rgba(255,61,61,.7)}
     #hud{position:fixed;right:10px;bottom:10px;z-index:10;background:rgba(0,0,0,.50);padding:5px 7px;border-radius:12px;width:96px;font-size:8px;text-align:center;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 14px rgba(89,255,192,.12)}
     #speedLabel{font-size:8px;opacity:.75;text-transform:uppercase;letter-spacing:.07em}
     #speedValue{font-size:16px;font-weight:900;line-height:1.0;margin:1px 0}
@@ -25,6 +27,7 @@
 <body>
   <div id="ui">
     <button id="startBtn">START FLYING</button>
+    <button class="boost" id="boostBtn">BOOST: OFF</button>
     <button class="secondary" id="motionBtn">ENABLE PHONE MOTION</button>
     <button class="dark" id="cardboardBtn">CARDBOARD SPLIT: OFF</button>
     <button class="dark" id="resetBtn">RESET</button>
@@ -38,7 +41,7 @@
   <script>
   (()=>{
     const status=document.getElementById('status'), hud=document.getElementById('hud'), speedValue=document.getElementById('speedValue'), needle=document.getElementById('needle');
-    let running=false, cardboard=false, motion=false;
+    let running=false, cardboard=false, motion=false, boost=false;
     let yaw=0, pitch=-0.42, targetYaw=0, targetPitch=-0.42, lastT=performance.now();
     let initialOri=null, currentOri=null;
     const data=window.CHIP_DATA || {bbox:[0,0,10000,10000],layers:{}};
@@ -46,120 +49,82 @@
     const chipUm={w:bbox[2]-bbox[0], h:bbox[3]-bbox[1]};
     const UM_PER_UNIT=1000;
     const chipW=chipUm.w/UM_PER_UNIT, chipH=chipUm.h/UM_PER_UNIT;
+    const NB_THICKNESS_UM=1; // visual Nb thickness (real ~200 nm). Photon can dip into trenches by this amount.
     const maxZ=10000, minZ=0;
     const state={x:chipUm.w/2, y:chipUm.h/2, z:2200};
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x030609);
-    const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.002, 80);
+    const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.0005, 80);
     camera.up.set(0,0,1);
     const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,3.5)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
     scene.add(new THREE.HemisphereLight(0xffffff,0x445566,1.25));
     const dirLight=new THREE.DirectionalLight(0xffffff,1.2); dirLight.position.set(2,5,3); scene.add(dirLight);
     const siThicknessUnit=500/UM_PER_UNIT;
-    const nbThicknessUnit=0.2/UM_PER_UNIT;
     const baseGeo=new THREE.BoxGeometry(chipW,chipH,siThicknessUnit);
     const baseMat=new THREE.MeshStandardMaterial({color:0x171a1d,roughness:.9,metalness:.01});
     const base=new THREE.Mesh(baseGeo,baseMat); base.position.set(0,0,-siThicknessUnit/2); scene.add(base);
-    const nbFilm=new THREE.Mesh(new THREE.BoxGeometry(chipW,chipH,Math.max(nbThicknessUnit,0.001)), new THREE.MeshStandardMaterial({color:0xf1f4f7,roughness:.22,metalness:.95,transparent:true,opacity:.86}));
-    nbFilm.position.set(0,0,0.0005); scene.add(nbFilm);
+
+    // ---- v13: real 3D Nb layer with etched holes (layer 134). Photon can't pass through it.
+    function nbMapPt(p){ return [(p[0]-bbox[0]-chipUm.w/2)/UM_PER_UNIT, (p[1]-bbox[1]-chipUm.h/2)/UM_PER_UNIT]; }
+    const chipShape = new THREE.Shape();
+    chipShape.moveTo(-chipW/2, -chipH/2);
+    chipShape.lineTo( chipW/2, -chipH/2);
+    chipShape.lineTo( chipW/2,  chipH/2);
+    chipShape.lineTo(-chipW/2,  chipH/2);
+    chipShape.closePath();
+    const trench134 = (data.layers['134']||[]).filter(p=>p && p.length>=3);
+    for (const p of trench134){
+      const hole = new THREE.Path();
+      const a = nbMapPt(p[0]); hole.moveTo(a[0], a[1]);
+      for (let i=1;i<p.length;i++){ const m=nbMapPt(p[i]); hole.lineTo(m[0], m[1]); }
+      hole.closePath();
+      chipShape.holes.push(hole);
+    }
+    const nbHeight = NB_THICKNESS_UM/UM_PER_UNIT;
+    let nbMesh=null;
+    try {
+      const nbGeo = new THREE.ExtrudeGeometry(chipShape, {depth: nbHeight, bevelEnabled:false, curveSegments:1});
+      const nbMat = new THREE.MeshStandardMaterial({color:0xc9d3de, metalness:0.95, roughness:0.28});
+      nbMesh = new THREE.Mesh(nbGeo, nbMat);
+      scene.add(nbMesh);
+    } catch(e){
+      console.warn('Nb extrusion failed, falling back to flat film:', e);
+      const flat = new THREE.Mesh(new THREE.BoxGeometry(chipW, chipH, nbHeight), new THREE.MeshStandardMaterial({color:0xc9d3de, metalness:0.95, roughness:0.28}));
+      flat.position.z = nbHeight/2;
+      scene.add(flat);
+    }
+
     function makeTexture(){
       const S=12288, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
-      g.fillStyle='#171a1d'; g.fillRect(0,0,S,S);
+      // v13: transparent background — the 3D Nb extrusion is the visual base.
+      // Don't paint layer 134 (it's real geometry now); paint other layers as ID overlays.
+      g.clearRect(0,0,S,S);
       function map(pt){ return [(pt[0]-bbox[0])/chipUm.w*S, S-(pt[1]-bbox[1])/chipUm.h*S]; }
       const styles={
-        '134':'rgba(0,0,0,.98)',
-        '136':'rgba(248,250,252,.98)',
-        '137':'rgba(215,226,238,.96)',
+        '136':'rgba(248,250,252,.85)',
+        '137':'rgba(215,226,238,.80)',
         '146':'rgba(255,215,95,.74)',
         '147':'rgba(255,130,230,.68)',
-        '131':'rgba(245,250,255,.72)'
+        '131':'rgba(255,150,250,.95)'
       };
-      const order=['134','131','136','137','146','147'];
+      const order=['131','136','137','146','147'];
       for(const layer of order){ const polys=data.layers[layer]||[]; g.fillStyle=styles[layer]||'rgba(255,255,255,.6)';
-        g.strokeStyle=layer==='134'?'rgba(0,0,0,.95)':'rgba(255,255,255,.70)'; g.lineWidth=3;
-        for(const p of polys){ if(!p||p.length<3) continue; g.beginPath(); const a=map(p[0]); g.moveTo(a[0],a[1]); for(let i=1;i<p.length;i++){const m=map(p[i]); g.lineTo(m[0],m[1]);} g.closePath(); g.fill(); if(layer!=='134') g.stroke(); }
+        g.strokeStyle='rgba(255,255,255,.70)'; g.lineWidth=3;
+        for(const p of polys){ if(!p||p.length<3) continue; g.beginPath(); const a=map(p[0]); g.moveTo(a[0],a[1]); for(let i=1;i<p.length;i++){const m=map(p[i]); g.lineTo(m[0],m[1]);} g.closePath(); g.fill(); g.stroke(); }
       }
-      g.fillStyle='rgba(255,255,255,.75)'; g.font='36px system-ui'; g.fillText('Real GDS layout texture v12: layers 134, 131, 136, 137, 146, 147',40,70);
+      g.fillStyle='rgba(255,255,255,.75)'; g.font='36px system-ui'; g.fillText('GDS overlay v13: 131/136/137/146/147 (134 = real 3D etched holes)',40,70);
       const tex=new THREE.CanvasTexture(c);
-      const maxAniso = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1;
-      tex.anisotropy = maxAniso;
-      tex.minFilter = THREE.LinearMipMapLinearFilter;
-      tex.magFilter = THREE.LinearFilter;
-      tex.generateMipmaps = true;
+      tex.anisotropy=Math.min(8, renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1);
       tex.needsUpdate=true; return tex;
     }
-    const topMat=new THREE.MeshBasicMaterial({map:makeTexture(),side:THREE.DoubleSide});
-    const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat); top.position.z=0.002; scene.add(top);
+    const topMat=new THREE.MeshBasicMaterial({map:makeTexture(),side:THREE.DoubleSide,transparent:true,depthWrite:false});
+    const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat);
+    top.position.z = nbHeight + 0.0001; // sit just above the Nb top so layer overlays read clearly
+    scene.add(top);
     const edge=new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({color:0x88aaff,transparent:true,opacity:.35})); edge.position.copy(base.position); scene.add(edge);
 
-    const waveGroup=new THREE.Group(); scene.add(waveGroup);
-    const waveObjects=[];
-    function polyBounds(poly){ let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity; for(const q of poly){ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); } return {minx,miny,maxx,maxy,w:maxx-minx,h:maxy-miny}; }
-    function mkLine(points, color, opacity, widthHint){
-      const geo=new THREE.BufferGeometry().setFromPoints(points);
-      const mat=new THREE.LineBasicMaterial({color,transparent:true,opacity});
-      const line=new THREE.Line(geo,mat); line.userData.widthHint=widthHint||1; waveGroup.add(line); waveObjects.push(line); return line;
-    }
-    function addFlareResonator(cxUm, cyUm, wUm, hUm, angle, kind){
-      const count = kind==='spiral' ? 46 : 64;
-      for(let j=0;j<count;j++){
-        const pts=[]; const N=34;
-        const lane=(j/(count-1)-0.5);
-        const phase=Math.random()*Math.PI*2;
-        const color = j%2 ? 0x1aa7ff : 0xff8a18;
-        for(let i=0;i<N;i++){
-          const f=i/(N-1);
-          let x,y;
-          if(kind==='spiral'){
-            const th=phase + f*Math.PI*5.6;
-            const r=(0.12+0.78*f)*(Math.min(wUm,hUm)*0.48) + lane*18*Math.sin(f*Math.PI*4);
-            x=cxUm+r*Math.cos(th); y=cyUm+r*Math.sin(th);
-          } else {
-            const u=(f-0.5)*wUm;
-            const edge=Math.sign(lane||1);
-            const v=lane*hUm*0.82 + edge*20*Math.sin(f*Math.PI*2+phase);
-            const antinode=Math.sin(Math.PI*f)*Math.sin(6*Math.PI*f+phase);
-            const flare=antinode*(18+22*Math.abs(lane));
-            x=cxUm + u*Math.cos(angle) - (v+flare)*Math.sin(angle);
-            y=cyUm + u*Math.sin(angle) + (v+flare)*Math.cos(angle);
-          }
-          pts.push(new THREE.Vector3((x-chipUm.w/2)/UM_PER_UNIT,(y-chipUm.h/2)/UM_PER_UNIT,0.055+0.0008*j));
-        }
-        const line=mkLine(pts,color,0.22+0.24*Math.random());
-        line.userData={kind:'flare',base:pts.map(p=>p.clone()),phase,amp:(kind==='spiral'?0.020:0.035),breath:3.4+Math.random()*2.4,color};
-      }
-      const canvas=document.createElement('canvas'); canvas.width=512; canvas.height=512; const g=canvas.getContext('2d');
-      const grd=g.createRadialGradient(256,256,18,256,256,250);
-      grd.addColorStop(0,'rgba(255,160,35,.38)'); grd.addColorStop(.45,'rgba(35,165,255,.20)'); grd.addColorStop(1,'rgba(0,0,0,0)');
-      g.fillStyle=grd; g.fillRect(0,0,512,512);
-      const tex=new THREE.CanvasTexture(canvas);
-      const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:.36,depthWrite:false,blending:THREE.AdditiveBlending});
-      const mesh=new THREE.Mesh(new THREE.PlaneGeometry(wUm/UM_PER_UNIT,hUm/UM_PER_UNIT),mat);
-      mesh.position.set((cxUm-chipUm.w/2)/UM_PER_UNIT,(cyUm-chipUm.h/2)/UM_PER_UNIT,0.048); mesh.rotation.z=angle; mesh.userData={kind:'glow',phase:Math.random()*6.28};
-      waveGroup.add(mesh); waveObjects.push(mesh);
-    }
-    function addTravelingEM(cxUm,cyUm,lenUm,angle){
-      for(let c=0;c<2;c++){
-        const pts=[]; const N=110; const offset=(c?18:-18);
-        for(let i=0;i<N;i++){
-          const f=i/(N-1); const u=(f-0.5)*lenUm; const v=offset + 18*Math.sin(f*Math.PI*8);
-          const x=cxUm+u*Math.cos(angle)-v*Math.sin(angle); const y=cyUm+u*Math.sin(angle)+v*Math.cos(angle);
-          pts.push(new THREE.Vector3((x-chipUm.w/2)/UM_PER_UNIT,(y-chipUm.h/2)/UM_PER_UNIT,0.043));
-        }
-        const line=mkLine(pts,c?0x1aa7ff:0xff8a18,.62);
-        line.userData={kind:'em',base:pts.map(p=>p.clone()),phase:c*Math.PI,amp:0.018,angle};
-      }
-    }
-    function addFields(){
-      addFlareResonator(chipUm.w*0.50, chipUm.h*0.73, chipUm.w*0.46, chipUm.h*0.16, 0, 'rect');
-      addFlareResonator(chipUm.w*0.50, chipUm.h*0.42, chipUm.w*0.36, chipUm.h*0.28, 0, 'spiral');
-      addTravelingEM(chipUm.w*0.50, chipUm.h*0.61, chipUm.w*0.54, 0);
-      addTravelingEM(chipUm.w*0.73, chipUm.h*0.55, chipUm.h*0.30, Math.PI/2);
-    }
-    // v12: old wave/flare visualization replaced by the blue/orange halos below.
-    // addFields();
-
-    // ---- v12: real 3D meshes for the qubit pads, junction leads, and Josephson junctions.
+    // ---- v13: 3D meshes for the qubit pads, junction leads, and Josephson junctions.
+    // Sit on top of the Nb (z >= NB_THICKNESS_UM).
     const detailGroup = new THREE.Group(); scene.add(detailGroup);
     function shapeFromPoly(p){
       const s = new THREE.Shape();
@@ -189,11 +154,11 @@
         } catch(e){}
       }
     }
-    addLayerMeshes('136', 0xffe8b8, 0x402200, 0.35, 0.13, 0.20);
-    addLayerMeshes('137', 0xffd070, 0x553200, 0.55, 0.13, 0.34);
-    addLayerMeshes('131', 0xff66ee, 0xff44cc, 1.5, 0.08, 0.47, {roughness:0.2, metalness:0.4});
+    addLayerMeshes('136', 0xffe8b8, 0x402200, 0.35, 0.13, NB_THICKNESS_UM + 0.05);
+    addLayerMeshes('137', 0xffd070, 0x553200, 0.55, 0.13, NB_THICKNESS_UM + 0.20);
+    addLayerMeshes('131', 0xff66ee, 0xff44cc, 1.5, 0.08, NB_THICKNESS_UM + 0.34, {roughness:0.2, metalness:0.4});
 
-    // ---- v12: blue/orange glow halos around the 8 lumped-element resonators.
+    // ---- blue/orange glow halos around the 8 lumped-element resonators
     const qubitCenters = [
       [6136, 4975],   [3814, 4975],
       [5925, 5762.5], [4025, 5762.5],
@@ -226,19 +191,19 @@
       const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false, blending: THREE.AdditiveBlending});
       const sizeUm = 820;
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeUm/UM_PER_UNIT, sizeUm/UM_PER_UNIT), mat);
-      mesh.position.set((cx-chipUm.w/2)/UM_PER_UNIT, (cy-chipUm.h/2)/UM_PER_UNIT, 0.025);
+      mesh.position.set((cx-chipUm.w/2)/UM_PER_UNIT, (cy-chipUm.h/2)/UM_PER_UNIT, nbHeight + 0.001);
       mesh.userData = {phase: i*0.785, isBlue};
       haloGroup.add(mesh); halos.push(mesh);
     });
 
-    const trenchPolys=(data.layers['134']||[]).map(poly=>({poly,b:polyBounds(poly)}));
+    // ---- floor: photon hovers on Nb at z=NB_THICKNESS_UM, dips to z=0 inside layer-134 etched openings.
+    function polyBounds(poly){ let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity; for(const q of poly){ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); } return {minx,miny,maxx,maxy,w:maxx-minx,h:maxy-miny}; }
+    const trenchPolys=trench134.map(poly=>({poly,b:polyBounds(poly)}));
     function pointInPoly(x,y,poly){ let inside=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const xi=poly[i][0]-bbox[0], yi=poly[i][1]-bbox[1], xj=poly[j][0]-bbox[0], yj=poly[j][1]-bbox[1]; const hit=((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi+1e-9)+xi); if(hit) inside=!inside; } return inside; }
     function isInTrench(x,y){ for(const t of trenchPolys){ const b=t.b; if(x+bbox[0]>=b.minx && x+bbox[0]<=b.maxx && y+bbox[1]>=b.miny && y+bbox[1]<=b.maxy && pointInPoly(x,y,t.poly)) return true; } return false; }
-    // v12 floor fix: photon body is ~5 um wide. Outside etched openings, floor = 5 um (hovers above the
-    // Nb film + texture so the chip layout stays visible looking down). In etched openings (layer 134),
-    // floor = 0 (the Si surface where Nb has been removed) so the photon can dip into the trench.
-    function floorZAt(x,y){ return isInTrench(x,y) ? 0 : 5; }
-    status.textContent='v12: junctions resolve close up; 8 blue/orange resonator halos active.'; setTimeout(()=>status.classList.add('hidden'),5000);
+    function floorZAt(x,y){ return isInTrench(x,y) ? 0 : NB_THICKNESS_UM; }
+    status.textContent='v13: 3D etched trenches, rigid Nb walls, boost button, vibrate near resonators.'; setTimeout(()=>status.classList.add('hidden'),5500);
+
     function lookDirection(){
       return new THREE.Vector3(
         Math.sin(yaw)*Math.cos(pitch),
@@ -254,6 +219,25 @@
       camera.lookAt(camera.position.x+d.x, camera.position.y+d.y, camera.position.z+d.z);
     }
     function forward(){ return lookDirection(); }
+
+    // vibration on resonator approach
+    let lastVibrate = 0;
+    function pulseVibrate(t){
+      let minD = Infinity;
+      for (const [cx,cy] of qubitCenters){
+        const dx = state.x - cx, dy = state.y - cy;
+        const dxy = Math.sqrt(dx*dx + dy*dy);
+        const d3 = Math.sqrt(dxy*dxy + state.z*state.z);
+        if (d3 < minD) minD = d3;
+      }
+      // strong pulse when very near, gentle when within ~600 µm
+      if (navigator.vibrate && minD < 600 && (t - lastVibrate) > 280){
+        const intensity = minD < 200 ? 80 : minD < 400 ? 45 : 25;
+        try { navigator.vibrate(intensity); } catch(e){}
+        lastVibrate = t;
+      }
+    }
+
     function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
       if(motion && currentOri && initialOri){
         let da=(currentOri.alpha-initialOri.alpha)*Math.PI/180; if(da>Math.PI)da-=2*Math.PI; if(da<-Math.PI)da+=2*Math.PI;
@@ -264,9 +248,36 @@
         targetPitch=tilt - .42;
       }
       updateCamera();
-      if(running){ const zForSpeed=Math.max(0,state.z); const v=9 + (zForSpeed/10)*(1 + 1.65*Math.pow(zForSpeed/maxZ,1.45)); const f=forward(); state.x += f.x*v*dt; state.y += f.y*v*dt; state.z += f.z*v*dt;
-        state.x=Math.max(0,Math.min(chipUm.w,state.x)); state.y=Math.max(0,Math.min(chipUm.h,state.y)); const floor=floorZAt(state.x,state.y); state.z=Math.max(floor,Math.min(maxZ,state.z)); }
-      const zForSpeed2=Math.max(0,state.z); const v=9 + (zForSpeed2/10)*(1 + 1.65*Math.pow(zForSpeed2/maxZ,1.45)); speedValue.textContent=v.toFixed(1); const maxSpeed=9 + (maxZ/10)*(1+1.65); const angle=-82+164*Math.max(0,Math.min(1,v/maxSpeed)); needle.style.transform=`rotate(${angle}deg)`;
+      const boostFactor = boost ? 5 : 1;
+      if(running){
+        const zForSpeed=Math.max(0,state.z);
+        const v=(9 + (zForSpeed/10)*(1 + 1.65*Math.pow(zForSpeed/maxZ,1.45))) * boostFactor;
+        const f=forward();
+        const tx = state.x + f.x*v*dt;
+        const ty = state.y + f.y*v*dt;
+        const tz = state.z + f.z*v*dt;
+        // Rigid-Nb collision: photon cannot enter the Nb material.
+        // If the new (x,y) has a higher floor than the photon's new z, it would clip into Nb -> block lateral move.
+        const tFloor = floorZAt(tx, ty);
+        if (tz < tFloor){
+          // bounce against wall: keep old x,y, allow only vertical motion (and only upward to floor)
+          state.z = Math.max(state.z, tFloor);
+          // small "stick to wall" — preserves immersion
+        } else {
+          state.x = tx; state.y = ty; state.z = tz;
+        }
+        state.x=Math.max(0,Math.min(chipUm.w,state.x));
+        state.y=Math.max(0,Math.min(chipUm.h,state.y));
+        const floor=floorZAt(state.x,state.y);
+        state.z=Math.max(floor,Math.min(maxZ,state.z));
+      }
+      pulseVibrate(t);
+      const zForSpeed2=Math.max(0,state.z);
+      const v=(9 + (zForSpeed2/10)*(1 + 1.65*Math.pow(zForSpeed2/maxZ,1.45))) * boostFactor;
+      speedValue.textContent=v.toFixed(1);
+      const maxSpeed=(9 + (maxZ/10)*(1+1.65)) * 5;
+      const angle=-82+164*Math.max(0,Math.min(1,v/maxSpeed));
+      needle.style.transform=`rotate(${angle}deg)`;
       const tt=t/1000;
       for (const h of halos){
         const breath = 0.55 + 0.45*Math.sin(tt*2.4 + h.userData.phase);
@@ -274,7 +285,6 @@
         const s = 1 + 0.10*breath;
         h.scale.set(s, s, 1);
       }
-      for(const obj of waveObjects){ if(obj.isLine){ const pos=obj.geometry.attributes.position; const base=obj.userData.base; if(obj.userData.kind==='em'){ const ang=obj.userData.angle+Math.PI/2; for(let i=0;i<base.length;i++){ const travel=Math.sin(i*.28-tt*5.2+obj.userData.phase); pos.setXYZ(i, base[i].x+Math.cos(ang)*obj.userData.amp*travel, base[i].y+Math.sin(ang)*obj.userData.amp*travel, base[i].z+0.014*Math.abs(travel)); } obj.material.opacity=.30+.45*Math.abs(Math.sin(tt*3.6+obj.userData.phase)); } else { for(let i=0;i<base.length;i++){ const flare=Math.sin(tt*obj.userData.breath+obj.userData.phase+i*.23); pos.setXYZ(i, base[i].x, base[i].y, base[i].z+obj.userData.amp*Math.abs(flare)); } obj.material.opacity=.18+.46*Math.abs(Math.sin(tt*obj.userData.breath+obj.userData.phase)); } pos.needsUpdate=true; } else if(obj.userData.kind==='glow'){ const pulse=.55+.45*Math.abs(Math.sin(tt*2.7+obj.userData.phase)); obj.material.opacity=.20+.26*pulse; obj.scale.set(1+.035*pulse,1+.035*pulse,1); } }
       if(cardboard){
         renderer.setScissorTest(true); const w=innerWidth/2,h=innerHeight; camera.aspect=(w/h); camera.updateProjectionMatrix();
         renderer.setViewport(0,0,w,h); renderer.setScissor(0,0,w,h); renderer.render(scene,camera);
@@ -282,16 +292,34 @@
       } else { camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setViewport(0,0,innerWidth,innerHeight); renderer.render(scene,camera); }
     }
     requestAnimationFrame(step);
+
     let dragging=false,lastX=0,lastY=0;
     renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
-    addEventListener('pointerup',()=>dragging=false); addEventListener('pointermove',e=>{ if(!dragging||motion) return; targetYaw-=(e.clientX-lastX)*0.005; targetPitch-=(e.clientY-lastY)*0.005; lastX=e.clientX; lastY=e.clientY; });
+    addEventListener('pointerup',()=>dragging=false);
+    addEventListener('pointermove',e=>{ if(!dragging||motion) return; targetYaw-=(e.clientX-lastX)*0.005; targetPitch-=(e.clientY-lastY)*0.005; lastX=e.clientX; lastY=e.clientY; });
     addEventListener('deviceorientation',e=>{ currentOri={alpha:e.alpha||0,beta:e.beta||0,gamma:e.gamma||0}; }, true);
-    document.getElementById('startBtn').onclick=()=>{ running=!running; document.getElementById('startBtn').textContent=running?'PAUSE':'START FLYING'; };
-    document.getElementById('cardboardBtn').onclick=()=>{ cardboard=!cardboard; document.getElementById('cardboardBtn').textContent='CARDBOARD SPLIT: '+(cardboard?'ON':'OFF'); };
+
+    const startBtn=document.getElementById('startBtn');
+    const boostBtn=document.getElementById('boostBtn');
+    const cardboardBtn=document.getElementById('cardboardBtn');
+    function refreshUiVisibility(){
+      // Hide the boost button in cardboard split view; re-show otherwise.
+      boostBtn.style.display = cardboard ? 'none' : '';
+    }
+    startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START FLYING'; };
+    boostBtn.onclick=()=>{
+      boost=!boost;
+      boostBtn.textContent='BOOST: '+(boost?'ON x5':'OFF');
+      boostBtn.classList.toggle('active', boost);
+      // brief tactile feedback when boost engaged on mobile
+      if (boost && navigator.vibrate) { try{ navigator.vibrate(20);}catch(e){} }
+    };
+    cardboardBtn.onclick=()=>{ cardboard=!cardboard; cardboardBtn.textContent='CARDBOARD SPLIT: '+(cardboard?'ON':'OFF'); refreshUiVisibility(); };
     document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200; targetYaw=yaw=0; targetPitch=pitch=-0.42; initialOri=currentOri; };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
     document.getElementById('motionBtn').onclick=async()=>{ const btn=document.getElementById('motionBtn'); try{ if(motion){ motion=false; btn.textContent='ENABLE PHONE MOTION'; status.classList.remove('hidden'); status.textContent='Phone motion disabled. Touch-drag look is active again.'; setTimeout(()=>status.classList.add('hidden'),3500); return; } if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){ const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted'){status.classList.remove('hidden'); status.textContent='Phone motion permission denied.'; return;} } motion=true; btn.textContent='DISABLE PHONE MOTION'; initialOri=currentOri||{alpha:0,beta:0,gamma:0}; status.classList.remove('hidden'); status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.'; setTimeout(()=>status.classList.add('hidden'),5000); }catch(err){ status.classList.remove('hidden'); status.textContent='Motion error: '+err.message; } };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
   })();
   </script>
 </body>
