@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v19</title>
+  <title>Quantum Chip Photon VR v21</title>
   <style>
-    html,body{margin:0;overflow:hidden;background:#030609;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
+    html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     #ui{position:fixed;left:8px;top:8px;z-index:10;display:flex;gap:5px;flex-wrap:wrap;max-width:92vw}
     /* v17: all buttons ~30% smaller */
     button{border:0;border-radius:8px;padding:8px 10px;font-weight:800;font-size:10px;background:#59ffc0;color:#02110c;box-shadow:0 0 12px rgba(89,255,192,.30)}
@@ -27,7 +27,9 @@
     #hud .logo-cell img.hidden{display:none}
     #status{position:fixed;right:8px;top:8px;z-index:10;background:rgba(0,0,0,.62);padding:8px 10px;border-radius:8px;font-size:11px;transition:opacity .7s ease}
     #status.hidden{opacity:0;pointer-events:none}
-    #center{position:fixed;left:50%;top:50%;width:10px;height:10px;margin-left:-5px;margin-top:-5px;border:1px solid rgba(255,255,255,.7);border-radius:50%;z-index:9;pointer-events:none}
+    /* v21: aircraft-HUD style reticle */
+    #center{position:fixed;left:50%;top:50%;width:84px;height:84px;margin-left:-42px;margin-top:-42px;z-index:9;pointer-events:none;color:#59ffc0;filter:drop-shadow(0 0 3px rgba(89,255,192,.55))}
+    #center svg{display:block;width:100%;height:100%;overflow:visible}
     canvas{display:block}
   </style>
 </head>
@@ -58,7 +60,22 @@
       <img id="logo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.classList.add('hidden')" />
     </div>
   </div>
-  <div id="center"></div>
+  <div id="center">
+    <svg viewBox="-50 -50 100 100" xmlns="http://www.w3.org/2000/svg">
+      <g fill="none" stroke="currentColor" stroke-linecap="round">
+        <!-- aircraft-style horizon brackets: wings with small downward end tick -->
+        <path d="M -28 0 L -10 0 M -28 0 L -28 4" stroke-width="1.6"/>
+        <path d="M  28 0 L  10 0 M  28 0 L  28 4" stroke-width="1.6"/>
+        <!-- top pip -->
+        <line x1="0" y1="-20" x2="0" y2="-10" stroke-width="1.4"/>
+        <!-- subtle outer arc segments (horizon scale hints) -->
+        <path d="M -38 -3 A 38 38 0 0 1 -30 -22" stroke-width="0.9" opacity="0.55"/>
+        <path d="M  38 -3 A 38 38 0 0 0  30 -22" stroke-width="0.9" opacity="0.55"/>
+        <!-- center dot -->
+        <circle cx="0" cy="0" r="1.6" fill="currentColor" stroke="rgba(8,28,22,.6)" stroke-width="0.5"/>
+      </g>
+    </svg>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
   <script src="chip-data.js"></script>
   <script>
@@ -77,13 +94,15 @@
     const NB_THICKNESS_UM=1; // visual Nb thickness (real ~200 nm). Photon can dip into trenches by this amount.
     const maxZ=10000, minZ=0;
     const state={x:chipUm.w/2, y:chipUm.h/2, z:2200};
-    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x030609);
+    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0c1622);
     const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.0005, 80);
     camera.up.set(0,0,1);
     const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,3.5)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
-    scene.add(new THREE.HemisphereLight(0xffffff,0x445566,1.25));
-    const dirLight=new THREE.DirectionalLight(0xffffff,1.2); dirLight.position.set(2,5,3); scene.add(dirLight);
+    // v20: a touch more light so the chip is easier to read while keeping shadow contrast.
+    scene.add(new THREE.HemisphereLight(0xffffff,0x556677,1.65));
+    const dirLight=new THREE.DirectionalLight(0xffffff,1.55); dirLight.position.set(2,5,3); scene.add(dirLight);
+    scene.add(new THREE.AmbientLight(0xb0c4dd, 0.20));
     const siThicknessUnit=500/UM_PER_UNIT;
     const baseGeo=new THREE.BoxGeometry(chipW,chipH,siThicknessUnit);
     const baseMat=new THREE.MeshStandardMaterial({color:0x171a1d,roughness:.9,metalness:.01});
@@ -274,7 +293,13 @@
       ).normalize();
     }
     function updateCamera(){
-      yaw += (targetYaw-yaw)*0.08; pitch += (targetPitch-pitch)*0.08; pitch=Math.max(-1.35,Math.min(1.25,pitch));
+      // v20: wrap the yaw delta to take the SHORTER way around — fixes the "pushed back" snap
+      // that used to happen when crossing the ±180° boundary.
+      let dy = targetYaw - yaw;
+      while (dy >  Math.PI) dy -= 2*Math.PI;
+      while (dy < -Math.PI) dy += 2*Math.PI;
+      yaw += dy * 0.08;
+      pitch += (targetPitch-pitch)*0.08; pitch=Math.max(-1.35,Math.min(1.25,pitch));
       const wx=(state.x-chipUm.w/2)/UM_PER_UNIT, wy=(state.y-chipUm.h/2)/UM_PER_UNIT, wz=state.z/UM_PER_UNIT;
       camera.position.set(wx,wy,wz);
       const d=lookDirection();
@@ -334,20 +359,22 @@
       const boostFactor = boost ? 5 : 1;
       if(running){
         const zForSpeed=Math.max(0,state.z);
-        const v=(9 + (zForSpeed/10)*(1 + 1.65*Math.pow(zForSpeed/maxZ,1.45))) * boostFactor;
+        // v20: minimum 20 µm/s so the photon can't get stuck on a flat floor.
+        const v=Math.max(20, (9 + (zForSpeed/10)*(1 + 1.65*Math.pow(zForSpeed/maxZ,1.45)))) * boostFactor;
         const f=forward();
         const tx = state.x + f.x*v*dt;
         const ty = state.y + f.y*v*dt;
         const tz = state.z + f.z*v*dt;
-        // Rigid-Nb collision: photon cannot enter the Nb material.
-        // If the new (x,y) has a higher floor than the photon's new z, it would clip into Nb -> block lateral move.
         const tFloor = floorZAt(tx, ty);
-        if (tz < tFloor){
-          // bounce against wall: keep old x,y, allow only vertical motion (and only upward to floor)
-          state.z = Math.max(state.z, tFloor);
-          // small "stick to wall" — preserves immersion
+        // v20: only block the lateral move if there's an actual WALL to climb (target floor higher than
+        // current photon z). Just looking slightly downward at floor level no longer freezes us.
+        const wallInTheWay = (tz < tFloor) && (tFloor > state.z + 1e-3);
+        if (wallInTheWay){
+          // bump up to top of the Nb wall, keep old x,y so we slide along the wall instead of clipping
+          state.z = tFloor;
         } else {
-          state.x = tx; state.y = ty; state.z = tz;
+          state.x = tx; state.y = ty;
+          state.z = Math.max(tFloor, tz); // can't sink below the floor at the new spot
         }
         state.x=Math.max(0,Math.min(chipUm.w,state.x));
         state.y=Math.max(0,Math.min(chipUm.h,state.y));
@@ -356,7 +383,7 @@
       }
       pulseVibrate(t);
       const zForSpeed2=Math.max(0,state.z);
-      const v=(9 + (zForSpeed2/10)*(1 + 1.65*Math.pow(zForSpeed2/maxZ,1.45))) * boostFactor;
+      const v=Math.max(20, (9 + (zForSpeed2/10)*(1 + 1.65*Math.pow(zForSpeed2/maxZ,1.45)))) * boostFactor;
       speedValue.textContent=v.toFixed(1);
       const maxSpeed=(9 + (maxZ/10)*(1+1.65)) * 5;
       const angle=-82+164*Math.max(0,Math.min(1,v/maxSpeed));
