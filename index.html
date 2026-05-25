@@ -3,16 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v21</title>
+  <title>Quantum Chip Photon VR v22 (Cardboard)</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
+    /* default (non-cardboard) UI */
     #ui{position:fixed;left:8px;top:8px;z-index:10;display:flex;gap:5px;flex-wrap:wrap;max-width:92vw}
-    /* v17: all buttons ~30% smaller */
-    button{border:0;border-radius:8px;padding:8px 10px;font-weight:800;font-size:10px;background:#59ffc0;color:#02110c;box-shadow:0 0 12px rgba(89,255,192,.30)}
-    button.secondary{background:#ffe16b;color:#100d00} button.dark{background:#dde8ff;color:#06101f}
+    button{border:0;border-radius:8px;padding:8px 10px;font-weight:800;font-size:10px;background:#59ffc0;color:#02110c;box-shadow:0 0 12px rgba(89,255,192,.30);cursor:pointer}
+    button.secondary{background:#ffe16b;color:#100d00}
+    button.dark{background:#dde8ff;color:#06101f}
     button.boost{background:#ff7a3d;color:#1b0a00;box-shadow:0 0 12px rgba(255,122,61,.40)}
     button.boost.active{background:#ff3d3d;color:#fff;box-shadow:0 0 16px rgba(255,61,61,.7)}
-    /* v17: HUD strip with speed clock, altitude clock, mini map, Qarakal/Basil */
+
+    /* v22: HUD strip now also includes a live minimap of the chip */
     #hud{position:fixed;right:8px;bottom:8px;z-index:10;background:rgba(0,0,0,.55);padding:5px 6px;border-radius:10px;display:flex;gap:6px;align-items:flex-end;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
     #hud .cell{width:78px;text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif}
     #hud .lbl{font-size:7px;opacity:.78;text-transform:uppercase;letter-spacing:.07em}
@@ -21,10 +23,53 @@
     #hud .gauge{position:relative;width:64px;height:18px;margin:2px auto 0;overflow:hidden}
     #hud .arc{position:absolute;left:6px;top:2px;width:52px;height:26px;border:2px solid rgba(221,232,255,.28);border-bottom:0;border-radius:52px 52px 0 0}
     #hud .needle{position:absolute;left:31px;bottom:0;width:2px;height:16px;background:#59ffc0;border-radius:3px;transform-origin:50% 100%;transform:rotate(-82deg);box-shadow:0 0 6px rgba(89,255,192,.7)}
-    #hud #altNeedle{background:#ffd166;box-shadow:0 0 6px rgba(255,209,102,.7)}
+    #hud .altNeedle{background:#ffd166;box-shadow:0 0 6px rgba(255,209,102,.7)}
+    #hud .map-cell{width:62px}
+    #hud .map-cell canvas{display:block;width:60px;height:60px;border-radius:4px;background:#101418;border:1px solid rgba(255,255,255,.18)}
     #hud .logo-cell{width:auto;display:flex;align-items:center;justify-content:center;padding:0 4px}
     #hud .logo-cell img{height:60px;max-height:60px;width:auto;display:block;object-fit:contain}
     #hud .logo-cell img.hidden{display:none}
+
+    /* CARDBOARD MODE — body class toggled by JS */
+    body.cardboard #hud{display:none !important}
+    body.cardboard #ui{
+      display:flex; flex-direction:column; gap:4px;
+      left:4px; top:50%; transform:translateY(-50%);
+      max-width:none;
+    }
+    body.cardboard #ui button{
+      font-size:8px; padding:3px 6px;
+      box-shadow:none; opacity:.85;
+      min-width:74px;
+    }
+    body.cardboard #motionBtn{display:none}     /* always-on in cardboard, no need for toggle */
+    body.cardboard #fullBtn{display:none}       /* cardboard is opened from fullscreen already */
+    body.cardboard #status{display:none}
+    body.cardboard #center{display:none}        /* a single centered reticle would split badly under the lens */
+
+    /* cardboard HUDs — one in each eye half. Positioned so they live in the
+       lens-visible inner upper area of each half (not all the way at the screen edge). */
+    .cb-hud{
+      display:none; position:fixed; z-index:11; pointer-events:none;
+      background:rgba(0,0,0,.50); border:1px solid rgba(255,255,255,.14);
+      border-radius:8px; padding:3px 5px;
+      box-shadow:0 0 10px rgba(89,255,192,.15);
+      gap:5px; align-items:center;
+      font-family:system-ui,-apple-system,sans-serif;
+    }
+    body.cardboard .cb-hud{display:flex}
+    .cb-hud .cell{text-align:center;color:#fff;min-width:30px}
+    .cb-hud .lbl{font-size:6px;opacity:.78;text-transform:uppercase;letter-spacing:.06em;line-height:1}
+    .cb-hud .val{font-size:10px;font-weight:900;line-height:1;margin:1px 0}
+    .cb-hud .unit{font-size:6px;opacity:.78;line-height:1}
+    .cb-hud canvas{display:block;width:38px;height:38px;border-radius:3px;background:#101418;border:1px solid rgba(255,255,255,.16)}
+    .cb-hud img{height:32px;max-height:32px;width:auto;display:block;object-fit:contain}
+    /* The phone is held landscape inside the cardboard. Each eye sees roughly the
+       central 70% of its half — so we anchor the HUD INSIDE that central area, slightly
+       to the right of the half's center, and well clear of the top/bottom edges. */
+    #cb-hud-left  { top:7vh; left:30vw; }
+    #cb-hud-right { top:7vh; right:5vw; }
+
     #status{position:fixed;right:8px;top:8px;z-index:10;background:rgba(0,0,0,.62);padding:8px 10px;border-radius:8px;font-size:11px;transition:opacity .7s ease}
     #status.hidden{opacity:0;pointer-events:none}
     /* v21: aircraft-HUD style reticle */
@@ -38,12 +83,18 @@
     <button id="startBtn">START FLYING</button>
     <button class="boost" id="boostBtn">BOOST: OFF</button>
     <button class="secondary" id="motionBtn">ENABLE PHONE MOTION</button>
-    <button class="dark" id="cardboardBtn">CARDBOARD SPLIT: OFF</button>
+    <button class="dark" id="cardboardBtn">CARDBOARD: OFF</button>
     <button class="dark" id="resetBtn">RESET</button>
     <button class="dark" id="fullBtn">FULL SCREEN</button>
   </div>
   <div id="status">Loading real GDS texture...</div>
+
+  <!-- main (non-cardboard) HUD: minimap + speed + altitude + Qarakal -->
   <div id="hud">
+    <div class="cell map-cell">
+      <div class="lbl">map</div>
+      <canvas id="miniMap" width="120" height="120"></canvas>
+    </div>
     <div class="cell">
       <div class="lbl">speed</div>
       <div class="val" id="speedValue">—</div>
@@ -54,12 +105,27 @@
       <div class="lbl">altitude</div>
       <div class="val" id="altValue">—</div>
       <div class="unit">µm</div>
-      <div class="gauge"><div class="arc"></div><div id="altNeedle" class="needle"></div></div>
+      <div class="gauge"><div class="arc"></div><div id="altNeedle" class="needle altNeedle"></div></div>
     </div>
     <div class="cell logo-cell">
       <img id="logo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.classList.add('hidden')" />
     </div>
   </div>
+
+  <!-- cardboard HUDs — one per eye half, smaller, inset from edges so visible through the lens -->
+  <div id="cb-hud-left" class="cb-hud">
+    <canvas class="cb-map" width="120" height="120"></canvas>
+    <div class="cell"><div class="lbl">v</div><div class="val cbSpeed">—</div><div class="unit">µm/s</div></div>
+    <div class="cell"><div class="lbl">alt</div><div class="val cbAlt">—</div><div class="unit">µm</div></div>
+    <img class="cbLogo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.style.display='none'" />
+  </div>
+  <div id="cb-hud-right" class="cb-hud">
+    <canvas class="cb-map" width="120" height="120"></canvas>
+    <div class="cell"><div class="lbl">v</div><div class="val cbSpeed">—</div><div class="unit">µm/s</div></div>
+    <div class="cell"><div class="lbl">alt</div><div class="val cbAlt">—</div><div class="unit">µm</div></div>
+    <img class="cbLogo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.style.display='none'" />
+  </div>
+
   <div id="center">
     <svg viewBox="-50 -50 100 100" xmlns="http://www.w3.org/2000/svg">
       <g fill="none" stroke="currentColor" stroke-linecap="round">
@@ -83,6 +149,7 @@
     const status=document.getElementById('status'), hud=document.getElementById('hud'),
           speedValue=document.getElementById('speedValue'), needle=document.getElementById('needle'),
           altValue=document.getElementById('altValue'), altNeedle=document.getElementById('altNeedle');
+    const cbHudL=document.getElementById('cb-hud-left'), cbHudR=document.getElementById('cb-hud-right');
     let running=false, cardboard=false, motion=false, boost=false;
     let yaw=0, pitch=-0.42, targetYaw=0, targetPitch=-0.42, lastT=performance.now();
     let initialOri=null, currentOri=null;
@@ -94,18 +161,26 @@
     const NB_THICKNESS_UM=1; // visual Nb thickness (real ~200 nm). Photon can dip into trenches by this amount.
     const maxZ=10000, minZ=0;
     const state={x:chipUm.w/2, y:chipUm.h/2, z:2200};
+
+    // v22: stereo eye separation. The photon is conceptually ~5 µm wide, but to actually
+    // perceive depth of the chip features (5000+ µm away) we need an IPD that's a bit larger.
+    // 220 µm here gives a clear depth pop on the chip without exaggerating; tune freely.
+    const IPD_UM = 220;
+
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0c1622);
     const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.0005, 80);
     camera.up.set(0,0,1);
     const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,3.5)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
-    // v20: a touch more light so the chip is easier to read while keeping shadow contrast.
-    scene.add(new THREE.HemisphereLight(0xffffff,0x556677,1.65));
-    const dirLight=new THREE.DirectionalLight(0xffffff,1.55); dirLight.position.set(2,5,3); scene.add(dirLight);
-    scene.add(new THREE.AmbientLight(0xb0c4dd, 0.20));
+    // v22: a touch more light. Nb is now significantly brighter (see material below), so
+    // we keep ambient moderate so the dark Si still reads as dark.
+    scene.add(new THREE.HemisphereLight(0xffffff,0x556677,1.85));
+    const dirLight=new THREE.DirectionalLight(0xffffff,1.75); dirLight.position.set(2,5,3); scene.add(dirLight);
+    scene.add(new THREE.AmbientLight(0xb0c4dd, 0.28));
     const siThicknessUnit=500/UM_PER_UNIT;
     const baseGeo=new THREE.BoxGeometry(chipW,chipH,siThicknessUnit);
-    const baseMat=new THREE.MeshStandardMaterial({color:0x171a1d,roughness:.9,metalness:.01});
+    // Silicon stays dark — almost matte black — so the bright Nb really pops next to it.
+    const baseMat=new THREE.MeshStandardMaterial({color:0x121417,roughness:.95,metalness:.01});
     const base=new THREE.Mesh(baseGeo,baseMat); base.position.set(0,0,-siThicknessUnit/2); scene.add(base);
 
     // ---- v13: real 3D Nb layer with etched holes (layer 134). Photon can't pass through it.
@@ -126,14 +201,20 @@
     }
     const nbHeight = NB_THICKNESS_UM/UM_PER_UNIT;
     let nbMesh=null;
+    // v22: MUCH brighter Nb so it stands out against the dark Si — critical for cardboard
+    // where the lens darkens and softens everything. Lower metalness keeps it luminous
+    // instead of reading as a dark mirror.
+    const NB_COLOR = 0xf2f5fa;
+    const NB_METAL = 0.55;
+    const NB_ROUGH = 0.35;
     try {
       const nbGeo = new THREE.ExtrudeGeometry(chipShape, {depth: nbHeight, bevelEnabled:false, curveSegments:1});
-      const nbMat = new THREE.MeshStandardMaterial({color:0xc9d3de, metalness:0.95, roughness:0.28});
+      const nbMat = new THREE.MeshStandardMaterial({color:NB_COLOR, metalness:NB_METAL, roughness:NB_ROUGH});
       nbMesh = new THREE.Mesh(nbGeo, nbMat);
       scene.add(nbMesh);
     } catch(e){
       console.warn('Nb extrusion failed, falling back to flat film:', e);
-      const flat = new THREE.Mesh(new THREE.BoxGeometry(chipW, chipH, nbHeight), new THREE.MeshStandardMaterial({color:0xc9d3de, metalness:0.95, roughness:0.28}));
+      const flat = new THREE.Mesh(new THREE.BoxGeometry(chipW, chipH, nbHeight), new THREE.MeshStandardMaterial({color:NB_COLOR, metalness:NB_METAL, roughness:NB_ROUGH}));
       flat.position.z = nbHeight/2;
       scene.add(flat);
     }
@@ -167,7 +248,6 @@
     const edge=new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({color:0x88aaff,transparent:true,opacity:.35})); edge.position.copy(base.position); scene.add(edge);
 
     // ---- v13: 3D meshes for the qubit pads, junction leads, and Josephson junctions.
-    // Sit on top of the Nb (z >= NB_THICKNESS_UM).
     const detailGroup = new THREE.Group(); scene.add(detailGroup);
     function shapeFromPoly(p){
       const s = new THREE.Shape();
@@ -207,12 +287,10 @@
     addLayerMeshes('137', 0xffd070, 0x553200, 0.55, 0.13, NB_THICKNESS_UM + 0.20);
     addLayerMeshes('131', 0xff66ee, 0xff44cc, 1.5, 0.08, NB_THICKNESS_UM + 0.34, {roughness:0.2, metalness:0.4});
 
-    // ---- v15: bandaid crossover dielectric (layer 146) at 1.5x Nb thickness, sitting on top of Nb.
-    // Translucent so the underlying chip remains readable.
-    const D146_THICK = 1.5 * NB_THICKNESS_UM; // µm
+    // ---- v15: bandaid crossover dielectric (layer 146)
+    const D146_THICK = 1.5 * NB_THICKNESS_UM;
     addLayerMeshes('146', 0x9be3ff, 0x224a66, 0.35, D146_THICK, NB_THICKNESS_UM, {roughness:0.45, metalness:0.05, opacity:0.55});
-    // ---- v15: top metal of bandaid crossovers (layer 147) at 2.0x Nb thickness, on top of 146.
-    const D147_THICK = 2.0 * NB_THICKNESS_UM; // µm
+    const D147_THICK = 2.0 * NB_THICKNESS_UM;
     addLayerMeshes('147', 0xeef4ff, 0x3a4a66, 0.20, D147_THICK, NB_THICKNESS_UM + D146_THICK, {roughness:0.3, metalness:0.85, opacity:0.92});
 
     // ---- blue/orange glow halos around the 8 lumped-element resonators
@@ -253,7 +331,7 @@
       haloGroup.add(mesh); halos.push(mesh);
     });
 
-    // ---- v16: ONE green sinusoidal glow per SQUID. No runway / no row of dots.
+    // ---- one green sinusoidal glow per SQUID
     function makeGreenTex(){
       const cv = document.createElement('canvas'); cv.width=cv.height=256;
       const cg = cv.getContext('2d');
@@ -269,7 +347,7 @@
     const idcGroup = new THREE.Group(); scene.add(idcGroup);
     const idcPulses = [];
     qubitCenters.forEach(([cx,cy])=>{
-      const sizeUm = 220; // single glow disc per SQUID
+      const sizeUm = 220;
       const mat = new THREE.MeshBasicMaterial({map: greenTex, transparent:true, depthWrite:false, blending: THREE.AdditiveBlending});
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeUm/UM_PER_UNIT, sizeUm/UM_PER_UNIT), mat);
       mesh.position.set((cx-chipUm.w/2)/UM_PER_UNIT, (cy-chipUm.h/2)/UM_PER_UNIT, nbHeight + 0.0008);
@@ -277,13 +355,71 @@
       idcGroup.add(mesh); idcPulses.push(mesh);
     });
 
-    // ---- floor: photon hovers on Nb at z=NB_THICKNESS_UM, dips to z=0 inside layer-134 etched openings.
+    // ---- floor logic (Nb height except inside etched openings)
     function polyBounds(poly){ let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity; for(const q of poly){ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); } return {minx,miny,maxx,maxy,w:maxx-minx,h:maxy-miny}; }
     const trenchPolys=trench134.map(poly=>({poly,b:polyBounds(poly)}));
     function pointInPoly(x,y,poly){ let inside=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const xi=poly[i][0]-bbox[0], yi=poly[i][1]-bbox[1], xj=poly[j][0]-bbox[0], yj=poly[j][1]-bbox[1]; const hit=((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi+1e-9)+xi); if(hit) inside=!inside; } return inside; }
     function isInTrench(x,y){ for(const t of trenchPolys){ const b=t.b; if(x+bbox[0]>=b.minx && x+bbox[0]<=b.maxx && y+bbox[1]>=b.miny && y+bbox[1]<=b.maxy && pointInPoly(x,y,t.poly)) return true; } return false; }
     function floorZAt(x,y){ return isInTrench(x,y) ? 0 : NB_THICKNESS_UM; }
-    status.textContent='v17: smaller buttons, altitude clock, live mini-map, Qarakal | Basil HUD.'; setTimeout(()=>status.classList.add('hidden'),5500);
+    status.textContent='v22: brighter Nb, lift-on-level, stereo IPD, cardboard mini-map HUD.'; setTimeout(()=>status.classList.add('hidden'),5500);
+
+    // ---- Minimap: cache the static chip layout once, then redraw player dot each frame.
+    // Used by the main HUD canvas and by both cardboard-eye HUD canvases.
+    const miniBg = document.createElement('canvas'); miniBg.width = miniBg.height = 120;
+    (function drawMiniBg(){
+      const g = miniBg.getContext('2d');
+      g.clearRect(0,0,120,120);
+      // chip background = dark Si tone
+      g.fillStyle = '#1a1d24';
+      g.fillRect(0,0,120,120);
+      // bright Nb outline (so the minimap matches the new Nb/Si contrast)
+      g.strokeStyle = '#cfd6e0'; g.lineWidth = 1;
+      g.strokeRect(0.5, 0.5, 119, 119);
+      // etched openings = darker patches (exposed Si)
+      g.fillStyle = 'rgba(60,75,95,0.85)';
+      for (const p of trench134){
+        if (!p || p.length<3) continue;
+        g.beginPath();
+        for (let i=0;i<p.length;i++){
+          const x = (p[i][0]-bbox[0])/chipUm.w * 120;
+          const y = 120 - (p[i][1]-bbox[1])/chipUm.h * 120;
+          if (i===0) g.moveTo(x,y); else g.lineTo(x,y);
+        }
+        g.closePath(); g.fill();
+      }
+      // qubit centers — small bright dots
+      for (const [cx,cy] of qubitCenters){
+        const x = cx/chipUm.w * 120;
+        const y = 120 - cy/chipUm.h * 120;
+        g.fillStyle = '#59ffc0';
+        g.beginPath(); g.arc(x,y,1.6,0,Math.PI*2); g.fill();
+      }
+    })();
+    const miniMainCanvas = document.getElementById('miniMap');
+    const cbMapCanvases = Array.from(document.querySelectorAll('.cb-map'));
+    function paintMini(target){
+      const g = target.getContext('2d');
+      const W = target.width, H = target.height;
+      g.imageSmoothingEnabled = true;
+      g.drawImage(miniBg, 0, 0, W, H);
+      // player position
+      const px = (state.x/chipUm.w) * W;
+      const py = H - (state.y/chipUm.h) * H;
+      // facing arrow (yaw=0 = +y world / up on map; map y is inverted)
+      const fx = Math.sin(yaw), fy = Math.cos(yaw);
+      const ax = px + fx * 7, ay = py - fy * 7;
+      g.strokeStyle = 'rgba(255,60,60,0.95)'; g.lineWidth = 1.6;
+      g.beginPath(); g.moveTo(px, py); g.lineTo(ax, ay); g.stroke();
+      // player dot
+      g.fillStyle = '#ff3a3a';
+      g.beginPath(); g.arc(px, py, 2.6, 0, Math.PI*2); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 0.8;
+      g.beginPath(); g.arc(px, py, 2.6, 0, Math.PI*2); g.stroke();
+    }
+    function paintAllMinis(){
+      paintMini(miniMainCanvas);
+      for (const c of cbMapCanvases) paintMini(c);
+    }
 
     function lookDirection(){
       return new THREE.Vector3(
@@ -293,8 +429,7 @@
       ).normalize();
     }
     function updateCamera(){
-      // v20: wrap the yaw delta to take the SHORTER way around — fixes the "pushed back" snap
-      // that used to happen when crossing the ±180° boundary.
+      // wrap yaw delta the short way around
       let dy = targetYaw - yaw;
       while (dy >  Math.PI) dy -= 2*Math.PI;
       while (dy < -Math.PI) dy += 2*Math.PI;
@@ -307,8 +442,7 @@
     }
     function forward(){ return lookDirection(); }
 
-    // v15: vibration scales with proximity to the SQUID/qubit sites.
-    // > 300 µm: nothing. At 300 µm: slow gentle pulse. Closer: faster + stronger.
+    // proximity-driven vibration around SQUIDs
     let lastVibrate = 0;
     function pulseVibrate(t){
       if (!navigator.vibrate) return;
@@ -319,11 +453,9 @@
         const d3 = Math.sqrt(dxy*dxy + state.z*state.z);
         if (d3 < minD) minD = d3;
       }
-      const RANGE = 300; // µm — silence beyond this
+      const RANGE = 300;
       if (minD > RANGE) return;
-      const f = 1 - (minD / RANGE); // 0 = far edge, 1 = right at the SQUID
-      // Pulse interval shrinks from 420 ms (at 300 µm) to 55 ms (very close).
-      // Pulse duration grows from 14 ms to 75 ms.
+      const f = 1 - (minD / RANGE);
       const interval = 420 - 365 * f;
       const duration = 14 + 61 * f;
       if (t - lastVibrate > interval){
@@ -332,16 +464,52 @@
       }
     }
 
+    // v22: aircraft-with-flaps LIFT. Looking at the horizon (pitch≈0) the photon climbs;
+    // looking visibly down beats the lift and you actually descend. Tuned so a small dive
+    // angle (~-13°) cancels the climb exactly.
+    const LIFT_FACTOR = 0.23;
+
+    function renderStereo(){
+      // Each eye sees its own half of the screen. We shift the camera laterally along its
+      // own right vector by ±IPD/2 — that's what produces parallax / depth. Without this,
+      // both halves show identical pixels and the user sees "double", not "3D".
+      const halfW = innerWidth/2, h = innerHeight;
+      camera.aspect = halfW/h;
+      // Slightly wider FOV per eye in cardboard so the lens magnification feels right.
+      const prevFov = camera.fov;
+      camera.fov = 88;
+      camera.updateProjectionMatrix();
+
+      // Camera "right" (purely horizontal regardless of pitch, because yaw rotates around world Z)
+      const rx = Math.cos(yaw), ry = -Math.sin(yaw);
+      const eyeSep = (IPD_UM / UM_PER_UNIT) / 2;
+      const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
+
+      renderer.setScissorTest(true);
+
+      // LEFT eye: shift camera left
+      camera.position.set(px - rx*eyeSep, py - ry*eyeSep, pz);
+      renderer.setViewport(0, 0, halfW, h);
+      renderer.setScissor (0, 0, halfW, h);
+      renderer.render(scene, camera);
+
+      // RIGHT eye: shift camera right (from original)
+      camera.position.set(px + rx*eyeSep, py + ry*eyeSep, pz);
+      renderer.setViewport(halfW, 0, halfW, h);
+      renderer.setScissor (halfW, 0, halfW, h);
+      renderer.render(scene, camera);
+
+      // restore
+      camera.position.set(px, py, pz);
+      renderer.setScissorTest(false);
+      camera.fov = prevFov;
+    }
+
     function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
       if(motion && currentOri && initialOri){
-        // alpha (compass heading) -> yaw, with wrap at ±π
         let da=(currentOri.alpha-initialOri.alpha)*Math.PI/180;
         if(da>Math.PI)da-=2*Math.PI; if(da<-Math.PI)da+=2*Math.PI;
         targetYaw=-da;
-        // v19: smooth pitch from a CONTINUOUS blend of beta (front/back tilt) and gamma (left/right tilt).
-        // Old code switched between them based on magnitude, which produced sudden jumps when crossing the
-        // threshold. Now we rotate the (beta, gamma) tilt vector by the device-screen orientation, giving
-        // a single smooth pitch reading regardless of how the phone is held.
         let db=(currentOri.beta -initialOri.beta )*Math.PI/180;
         if(db>Math.PI)db-=2*Math.PI; if(db<-Math.PI)db+=2*Math.PI;
         let dg=(currentOri.gamma-initialOri.gamma)*Math.PI/180;
@@ -352,29 +520,27 @@
         const o = orientationDeg * Math.PI/180;
         const tilt = db*Math.cos(o) - dg*Math.sin(o);
         targetPitch = tilt - .42;
-        // clamp the target itself so pitch can't accumulate past the visible range
         targetPitch = Math.max(-1.35, Math.min(1.25, targetPitch));
       }
       updateCamera();
       const boostFactor = boost ? 5 : 1;
       if(running){
         const zForSpeed=Math.max(0,state.z);
-        // v20: minimum 20 µm/s so the photon can't get stuck on a flat floor.
         const v=Math.max(20, (9 + (zForSpeed/10)*(1 + 1.65*Math.pow(zForSpeed/maxZ,1.45)))) * boostFactor;
         const f=forward();
+        // LIFT: even at pitch=0 the photon gains altitude. Dive enough to cancel it and you
+        // start descending. f.z is sin(pitch); LIFT_FACTOR is the constant flap-lift added.
+        const vz = (f.z + LIFT_FACTOR);
         const tx = state.x + f.x*v*dt;
         const ty = state.y + f.y*v*dt;
-        const tz = state.z + f.z*v*dt;
+        const tz = state.z + vz *v*dt;
         const tFloor = floorZAt(tx, ty);
-        // v20: only block the lateral move if there's an actual WALL to climb (target floor higher than
-        // current photon z). Just looking slightly downward at floor level no longer freezes us.
         const wallInTheWay = (tz < tFloor) && (tFloor > state.z + 1e-3);
         if (wallInTheWay){
-          // bump up to top of the Nb wall, keep old x,y so we slide along the wall instead of clipping
           state.z = tFloor;
         } else {
           state.x = tx; state.y = ty;
-          state.z = Math.max(tFloor, tz); // can't sink below the floor at the new spot
+          state.z = Math.max(tFloor, tz);
         }
         state.x=Math.max(0,Math.min(chipUm.w,state.x));
         state.y=Math.max(0,Math.min(chipUm.h,state.y));
@@ -388,10 +554,18 @@
       const maxSpeed=(9 + (maxZ/10)*(1+1.65)) * 5;
       const angle=-82+164*Math.max(0,Math.min(1,v/maxSpeed));
       needle.style.transform=`rotate(${angle}deg)`;
-      // v17: altitude clock + mini-map
       const altFrac = Math.max(0, Math.min(1, state.z / maxZ));
       altValue.textContent = state.z.toFixed(0);
       altNeedle.style.transform = `rotate(${-82 + 164*altFrac}deg)`;
+
+      // mirror values into the cardboard HUDs
+      const vStr = v.toFixed(1), aStr = state.z.toFixed(0);
+      for (const el of document.querySelectorAll('.cbSpeed')) el.textContent = vStr;
+      for (const el of document.querySelectorAll('.cbAlt'))   el.textContent = aStr;
+
+      // mini-maps (main + both cardboard halves)
+      paintAllMinis();
+
       const tt=t/1000;
       for (const h of halos){
         const breath = 0.55 + 0.45*Math.sin(tt*2.4 + h.userData.phase);
@@ -399,8 +573,6 @@
         const s = 1 + 0.10*breath;
         h.scale.set(s, s, 1);
       }
-      // v16: every SQUID glow breathes sinusoidally with the same shared phase.
-      // Just amplitude grow → drop → grow → drop. No runway sequencing.
       const squidPulse = 0.5 + 0.5*Math.sin(tt*1.6);
       for (const p of idcPulses){
         p.material.opacity = 0.10 + 0.90*squidPulse;
@@ -408,10 +580,14 @@
         p.scale.set(s, s, 1);
       }
       if(cardboard){
-        renderer.setScissorTest(true); const w=innerWidth/2,h=innerHeight; camera.aspect=(w/h); camera.updateProjectionMatrix();
-        renderer.setViewport(0,0,w,h); renderer.setScissor(0,0,w,h); renderer.render(scene,camera);
-        renderer.setViewport(w,0,w,h); renderer.setScissor(w,0,w,h); renderer.render(scene,camera); renderer.setScissorTest(false);
-      } else { camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setViewport(0,0,innerWidth,innerHeight); renderer.render(scene,camera); }
+        renderStereo();
+      } else {
+        camera.aspect=innerWidth/innerHeight;
+        camera.fov = 70;
+        camera.updateProjectionMatrix();
+        renderer.setViewport(0,0,innerWidth,innerHeight);
+        renderer.render(scene,camera);
+      }
     }
     requestAnimationFrame(step);
 
@@ -424,23 +600,254 @@
     const startBtn=document.getElementById('startBtn');
     const boostBtn=document.getElementById('boostBtn');
     const cardboardBtn=document.getElementById('cardboardBtn');
+    const motionBtn=document.getElementById('motionBtn');
+
     function refreshUiVisibility(){
-      // Hide the boost button + the whole HUD strip in cardboard split view; re-show otherwise.
-      boostBtn.style.display = cardboard ? 'none' : '';
-      hud.style.display = cardboard ? 'none' : '';
+      // The 'cardboard' body class drives all the CSS — vertical button stack, hidden motion
+      // button, hidden main HUD, visible per-eye cardboard HUDs.
+      document.body.classList.toggle('cardboard', cardboard);
     }
+
+    // Phone motion enable, factored out so cardboard mode can auto-enable it.
+    async function enablePhoneMotion(showStatus){
+      try{
+        if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){
+          const r=await DeviceOrientationEvent.requestPermission();
+          if(r!=='granted'){
+            if (showStatus){ status.classList.remove('hidden'); status.textContent='Phone motion permission denied.'; }
+            return false;
+          }
+        }
+        motion=true;
+        motionBtn.textContent='DISABLE PHONE MOTION';
+        initialOri=currentOri||{alpha:0,beta:0,gamma:0};
+        if (showStatus){
+          status.classList.remove('hidden');
+          status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.';
+          setTimeout(()=>status.classList.add('hidden'),5000);
+        }
+        return true;
+      }catch(err){
+        if (showStatus){ status.classList.remove('hidden'); status.textContent='Motion error: '+err.message; }
+        return false;
+      }
+    }
+    function disablePhoneMotion(){
+      motion=false;
+      motionBtn.textContent='ENABLE PHONE MOTION';
+    }
+
     startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START FLYING'; };
     boostBtn.onclick=()=>{
       boost=!boost;
       boostBtn.textContent='BOOST: '+(boost?'ON x5':'OFF');
       boostBtn.classList.toggle('active', boost);
-      // brief tactile feedback when boost engaged on mobile
       if (boost && navigator.vibrate) { try{ navigator.vibrate(20);}catch(e){} }
     };
-    cardboardBtn.onclick=()=>{ cardboard=!cardboard; cardboardBtn.textContent='CARDBOARD SPLIT: '+(cardboard?'ON':'OFF'); refreshUiVisibility(); };
+    cardboardBtn.onclick=async()=>{
+      cardboard=!cardboard;
+      cardboardBtn.textContent='CARDBOARD: '+(cardboard?'ON':'OFF');
+      refreshUiVisibility();
+      if (cardboard){
+        // Cardboard implies the phone is in the headset — phone motion is the ONLY way
+        // to look around. Auto-enable it (using the user-gesture tap on this very button
+        // to satisfy iOS Safari's permission requirement) and also auto-start flight so
+        // the user doesn't have to fish for buttons through the lens.
+        if (!motion) await enablePhoneMotion(false);
+        if (!running){ running = true; startBtn.textContent = 'PAUSE'; }
+        // Request fullscreen so the cardboard split fills the lens — only works inside a
+        // user gesture, which we still have because the user just tapped this button.
+        try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
+      }
+    };
     document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200; targetYaw=yaw=0; targetPitch=pitch=-0.42; initialOri=currentOri; };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
-    document.getElementById('motionBtn').onclick=async()=>{ const btn=document.getElementById('motionBtn'); try{ if(motion){ motion=false; btn.textContent='ENABLE PHONE MOTION'; status.classList.remove('hidden'); status.textContent='Phone motion disabled. Touch-drag look is active again.'; setTimeout(()=>status.classList.add('hidden'),3500); return; } if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){ const r=await DeviceOrientationEvent.requestPermission(); if(r!=='granted'){status.classList.remove('hidden'); status.textContent='Phone motion permission denied.'; return;} } motion=true; btn.textContent='DISABLE PHONE MOTION'; initialOri=currentOri||{alpha:0,beta:0,gamma:0}; status.classList.remove('hidden'); status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.'; setTimeout(()=>status.classList.add('hidden'),5000); }catch(err){ status.classList.remove('hidden'); status.textContent='Motion error: '+err.message; } };
+    motionBtn.onclick=async()=>{
+      if(motion){
+        disablePhoneMotion();
+        status.classList.remove('hidden');
+        status.textContent='Phone motion disabled. Touch-drag look is active again.';
+        setTimeout(()=>status.classList.add('hidden'),3500);
+      } else {
+        await enablePhoneMotion(true);
+      }
+    };
+    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
+evFov;
+    }
+
+    function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
+      if(motion && currentOri && initialOri){
+        let da=(currentOri.alpha-initialOri.alpha)*Math.PI/180;
+        if(da>Math.PI)da-=2*Math.PI; if(da<-Math.PI)da+=2*Math.PI;
+        targetYaw=-da;
+        let db=(currentOri.beta -initialOri.beta )*Math.PI/180;
+        if(db>Math.PI)db-=2*Math.PI; if(db<-Math.PI)db+=2*Math.PI;
+        let dg=(currentOri.gamma-initialOri.gamma)*Math.PI/180;
+        if(dg> Math.PI/2)dg-=Math.PI; if(dg<-Math.PI/2)dg+=Math.PI;
+        const orientationDeg = (typeof window.orientation === 'number')
+          ? window.orientation
+          : ((screen.orientation && screen.orientation.angle) || 0);
+        const o = orientationDeg * Math.PI/180;
+        const tilt = db*Math.cos(o) - dg*Math.sin(o);
+        targetPitch = tilt - .42;
+        targetPitch = Math.max(-1.35, Math.min(1.25, targetPitch));
+      }
+      updateCamera();
+      const boostFactor = boost ? 5 : 1;
+      if(running){
+        const zForSpeed=Math.max(0,state.z);
+        const v=Math.max(20, (9 + (zForSpeed/10)*(1 + 1.65*Math.pow(zForSpeed/maxZ,1.45)))) * boostFactor;
+        const f=forward();
+        // LIFT: even at pitch=0 the photon gains altitude. Dive enough to cancel it and you
+        // start descending. f.z is sin(pitch); LIFT_FACTOR is the constant flap-lift added.
+        const vz = (f.z + LIFT_FACTOR);
+        const tx = state.x + f.x*v*dt;
+        const ty = state.y + f.y*v*dt;
+        const tz = state.z + vz *v*dt;
+        const tFloor = floorZAt(tx, ty);
+        const wallInTheWay = (tz < tFloor) && (tFloor > state.z + 1e-3);
+        if (wallInTheWay){
+          state.z = tFloor;
+        } else {
+          state.x = tx; state.y = ty;
+          state.z = Math.max(tFloor, tz);
+        }
+        state.x=Math.max(0,Math.min(chipUm.w,state.x));
+        state.y=Math.max(0,Math.min(chipUm.h,state.y));
+        const floor=floorZAt(state.x,state.y);
+        state.z=Math.max(floor,Math.min(maxZ,state.z));
+      }
+      pulseVibrate(t);
+      const zForSpeed2=Math.max(0,state.z);
+      const v=Math.max(20, (9 + (zForSpeed2/10)*(1 + 1.65*Math.pow(zForSpeed2/maxZ,1.45)))) * boostFactor;
+      speedValue.textContent=v.toFixed(1);
+      const maxSpeed=(9 + (maxZ/10)*(1+1.65)) * 5;
+      const angle=-82+164*Math.max(0,Math.min(1,v/maxSpeed));
+      needle.style.transform=`rotate(${angle}deg)`;
+      const altFrac = Math.max(0, Math.min(1, state.z / maxZ));
+      altValue.textContent = state.z.toFixed(0);
+      altNeedle.style.transform = `rotate(${-82 + 164*altFrac}deg)`;
+
+      // mirror values into the cardboard HUDs
+      const vStr = v.toFixed(1), aStr = state.z.toFixed(0);
+      for (const el of document.querySelectorAll('.cbSpeed')) el.textContent = vStr;
+      for (const el of document.querySelectorAll('.cbAlt'))   el.textContent = aStr;
+
+      // mini-maps (main + both cardboard halves)
+      paintAllMinis();
+
+      const tt=t/1000;
+      for (const h of halos){
+        const breath = 0.55 + 0.45*Math.sin(tt*2.4 + h.userData.phase);
+        h.material.opacity = 0.55 + 0.45*breath;
+        const s = 1 + 0.10*breath;
+        h.scale.set(s, s, 1);
+      }
+      const squidPulse = 0.5 + 0.5*Math.sin(tt*1.6);
+      for (const p of idcPulses){
+        p.material.opacity = 0.10 + 0.90*squidPulse;
+        const s = 0.55 + 0.55*squidPulse;
+        p.scale.set(s, s, 1);
+      }
+      if(cardboard){
+        renderStereo();
+      } else {
+        camera.aspect=innerWidth/innerHeight;
+        camera.fov = 70;
+        camera.updateProjectionMatrix();
+        renderer.setViewport(0,0,innerWidth,innerHeight);
+        renderer.render(scene,camera);
+      }
+    }
+    requestAnimationFrame(step);
+
+    let dragging=false,lastX=0,lastY=0;
+    renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
+    addEventListener('pointerup',()=>dragging=false);
+    addEventListener('pointermove',e=>{ if(!dragging||motion) return; targetYaw-=(e.clientX-lastX)*0.005; targetPitch-=(e.clientY-lastY)*0.005; lastX=e.clientX; lastY=e.clientY; });
+    addEventListener('deviceorientation',e=>{ currentOri={alpha:e.alpha||0,beta:e.beta||0,gamma:e.gamma||0}; }, true);
+
+    const startBtn=document.getElementById('startBtn');
+    const boostBtn=document.getElementById('boostBtn');
+    const cardboardBtn=document.getElementById('cardboardBtn');
+    const motionBtn=document.getElementById('motionBtn');
+
+    function refreshUiVisibility(){
+      // The 'cardboard' body class drives all the CSS — vertical button stack, hidden motion
+      // button, hidden main HUD, visible per-eye cardboard HUDs.
+      document.body.classList.toggle('cardboard', cardboard);
+    }
+
+    // Phone motion enable, factored out so cardboard mode can auto-enable it.
+    async function enablePhoneMotion(showStatus){
+      try{
+        if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){
+          const r=await DeviceOrientationEvent.requestPermission();
+          if(r!=='granted'){
+            if (showStatus){ status.classList.remove('hidden'); status.textContent='Phone motion permission denied.'; }
+            return false;
+          }
+        }
+        motion=true;
+        motionBtn.textContent='DISABLE PHONE MOTION';
+        initialOri=currentOri||{alpha:0,beta:0,gamma:0};
+        if (showStatus){
+          status.classList.remove('hidden');
+          status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.';
+          setTimeout(()=>status.classList.add('hidden'),5000);
+        }
+        return true;
+      }catch(err){
+        if (showStatus){ status.classList.remove('hidden'); status.textContent='Motion error: '+err.message; }
+        return false;
+      }
+    }
+    function disablePhoneMotion(){
+      motion=false;
+      motionBtn.textContent='ENABLE PHONE MOTION';
+    }
+
+    startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START FLYING'; };
+    boostBtn.onclick=()=>{
+      boost=!boost;
+      boostBtn.textContent='BOOST: '+(boost?'ON x5':'OFF');
+      boostBtn.classList.toggle('active', boost);
+      if (boost && navigator.vibrate) { try{ navigator.vibrate(20);}catch(e){} }
+    };
+    cardboardBtn.onclick=async()=>{
+      cardboard=!cardboard;
+      cardboardBtn.textContent='CARDBOARD: '+(cardboard?'ON':'OFF');
+      refreshUiVisibility();
+      if (cardboard){
+        // Cardboard implies the phone is in the headset — phone motion is the ONLY way
+        // to look around. Auto-enable it (using the user-gesture tap on this very button
+        // to satisfy iOS Safari's permission requirement) and also auto-start flight so
+        // the user doesn't have to fish for buttons through the lens.
+        if (!motion) await enablePhoneMotion(false);
+        if (!running){ running = true; startBtn.textContent = 'PAUSE'; }
+        // Request fullscreen so the cardboard split fills the lens — only works inside a
+        // user gesture, which we still have because the user just tapped this button.
+        try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
+      }
+    };
+    document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200; targetYaw=yaw=0; targetPitch=pitch=-0.42; initialOri=currentOri; };
+    document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
+    motionBtn.onclick=async()=>{
+      if(motion){
+        disablePhoneMotion();
+        status.classList.remove('hidden');
+        status.textContent='Phone motion disabled. Touch-drag look is active again.';
+        setTimeout(()=>status.classList.add('hidden'),3500);
+      } else {
+        await enablePhoneMotion(true);
+      }
+    };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
     refreshUiVisibility();
   })();
