@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v22 (Cardboard)</title>
+  <title>Quantum Chip Photon VR v23 (Cardboard, ADI)</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     /* default (non-cardboard) UI */
@@ -45,7 +45,8 @@
     body.cardboard #motionBtn{display:none}     /* always-on in cardboard, no need for toggle */
     body.cardboard #fullBtn{display:none}       /* cardboard is opened from fullscreen already */
     body.cardboard #status{display:none}
-    body.cardboard #center{display:none}        /* a single centered reticle would split badly under the lens */
+    /* v23: single centered reticle hidden in cardboard — we use per-eye ADIs instead */
+    body.cardboard #center{display:none}
 
     /* cardboard HUDs — one in each eye half. Positioned so they live in the
        lens-visible inner upper area of each half (not all the way at the screen edge). */
@@ -70,11 +71,46 @@
     #cb-hud-left  { top:7vh; left:30vw; }
     #cb-hud-right { top:7vh; right:5vw; }
 
+    /* v23: per-eye Attitude Director Indicator (ADI). Two copies, one in each eye half,
+       so the brain fuses them into one stable instrument floating in front of the photon. */
+    .cb-adi{
+      display:none; position:fixed; z-index:11; pointer-events:none;
+      width:130px; height:130px;
+      filter:drop-shadow(0 0 4px rgba(0,0,0,.6));
+    }
+    body.cardboard .cb-adi{display:block}
+    .cb-adi svg{display:block;width:100%;height:100%;overflow:hidden}
+    /* anchor each ADI inside the lens-visible center area of its eye half */
+    #cb-adi-left  { bottom:6vh; left:18vw;  transform:translateX(-50%); }
+    #cb-adi-right { bottom:6vh; right:18vw; transform:translateX(50%);  }
+
+    /* v23: rotate-phone prompt — covers the screen if the user is in portrait. */
+    #rotateOverlay{
+      display:none; position:fixed; inset:0; z-index:1000;
+      background:rgba(8,18,30,0.95); color:#fff;
+      align-items:center; justify-content:center;
+      flex-direction:column; gap:14px;
+      font-family:system-ui,-apple-system,sans-serif; text-align:center; padding:24px;
+    }
+    @media (orientation: portrait) and (max-width: 900px){
+      #rotateOverlay{display:flex}
+    }
+    #rotateOverlay .icon{
+      width:64px; height:64px; border:3px solid #59ffc0; border-radius:10px;
+      animation: rotPrompt 1.8s ease-in-out infinite;
+      box-shadow:0 0 16px rgba(89,255,192,.45);
+    }
+    @keyframes rotPrompt {
+      0%   { transform: rotate(0deg)   scale(1,1.5); }
+      50%  { transform: rotate(90deg)  scale(1,1.5); }
+      100% { transform: rotate(90deg)  scale(1,1.5); }
+    }
+
     #status{position:fixed;right:8px;top:8px;z-index:10;background:rgba(0,0,0,.62);padding:8px 10px;border-radius:8px;font-size:11px;transition:opacity .7s ease}
     #status.hidden{opacity:0;pointer-events:none}
-    /* v21: aircraft-HUD style reticle */
-    #center{position:fixed;left:50%;top:50%;width:84px;height:84px;margin-left:-42px;margin-top:-42px;z-index:9;pointer-events:none;color:#59ffc0;filter:drop-shadow(0 0 3px rgba(89,255,192,.55))}
-    #center svg{display:block;width:100%;height:100%;overflow:visible}
+    /* v23: real aircraft attitude indicator (ADI) — sky/ground ball, pitch ladder, fixed bird */
+    #center{position:fixed;left:50%;bottom:6vh;top:auto;width:160px;height:160px;margin-left:-80px;margin-top:0;z-index:9;pointer-events:none;filter:drop-shadow(0 0 4px rgba(0,0,0,.6))}
+    #center svg{display:block;width:100%;height:100%;overflow:hidden}
     canvas{display:block}
   </style>
 </head>
@@ -126,21 +162,76 @@
     <img class="cbLogo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.style.display='none'" />
   </div>
 
-  <div id="center">
+  <!-- v23: real aircraft Attitude Director Indicator (ADI). The big #center one is used
+       outside cardboard; the two .cb-adi clones below are used in cardboard, one per eye. -->
+  <template id="adiTemplate">
     <svg viewBox="-50 -50 100 100" xmlns="http://www.w3.org/2000/svg">
-      <g fill="none" stroke="currentColor" stroke-linecap="round">
-        <!-- aircraft-style horizon brackets: wings with small downward end tick -->
-        <path d="M -28 0 L -10 0 M -28 0 L -28 4" stroke-width="1.6"/>
-        <path d="M  28 0 L  10 0 M  28 0 L  28 4" stroke-width="1.6"/>
-        <!-- top pip -->
-        <line x1="0" y1="-20" x2="0" y2="-10" stroke-width="1.4"/>
-        <!-- subtle outer arc segments (horizon scale hints) -->
-        <path d="M -38 -3 A 38 38 0 0 1 -30 -22" stroke-width="0.9" opacity="0.55"/>
-        <path d="M  38 -3 A 38 38 0 0 0  30 -22" stroke-width="0.9" opacity="0.55"/>
-        <!-- center dot -->
-        <circle cx="0" cy="0" r="1.6" fill="currentColor" stroke="rgba(8,28,22,.6)" stroke-width="0.5"/>
+      <defs>
+        <clipPath class="adiClip"><circle cx="0" cy="0" r="42"/></clipPath>
+        <linearGradient class="skyGrad" x1="0" y1="-1" x2="0" y2="0">
+          <stop offset="0%"   stop-color="#0d4a8a"/>
+          <stop offset="100%" stop-color="#5fa8e8"/>
+        </linearGradient>
+        <linearGradient class="grdGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="#8c5a26"/>
+          <stop offset="100%" stop-color="#3a2310"/>
+        </linearGradient>
+      </defs>
+      <!-- the rolling/pitching ball, clipped to the round bezel -->
+      <g class="adiBall" clip-path="url(#adiClip)">
+        <g class="adiPitch">
+          <!-- sky and ground halves, oversized so they cover under pitch travel -->
+          <rect class="sky" x="-120" y="-200" width="240" height="200" fill="url(#skyGrad)"/>
+          <rect class="grd" x="-120" y="0"    width="240" height="200" fill="url(#grdGrad)"/>
+          <!-- horizon line -->
+          <line x1="-70" y1="0" x2="70" y2="0" stroke="#fff" stroke-width="1.2"/>
+          <!-- pitch ladder above and below -->
+          <g stroke="#fff" stroke-width="0.55" fill="#fff" font-family="system-ui" font-size="3.5" text-anchor="middle">
+            <line x1="-9"  y1="-7"  x2="9"  y2="-7"/>
+            <line x1="-13" y1="-14" x2="13" y2="-14"/><text x="-17" y="-12.5">10</text><text x="17" y="-12.5">10</text>
+            <line x1="-9"  y1="-21" x2="9"  y2="-21"/>
+            <line x1="-13" y1="-28" x2="13" y2="-28"/><text x="-17" y="-26.5">20</text><text x="17" y="-26.5">20</text>
+            <line x1="-9"  y1="-35" x2="9"  y2="-35"/>
+            <line x1="-9"  y1="7"   x2="9"  y2="7"/>
+            <line x1="-13" y1="14"  x2="13" y2="14"/><text x="-17" y="15.5">10</text><text x="17" y="15.5">10</text>
+            <line x1="-9"  y1="21"  x2="9"  y2="21"/>
+            <line x1="-13" y1="28"  x2="13" y2="28"/><text x="-17" y="29.5">20</text><text x="17" y="29.5">20</text>
+            <line x1="-9"  y1="35"  x2="9"  y2="35"/>
+          </g>
+        </g>
+      </g>
+      <!-- fixed bezel ring -->
+      <circle cx="0" cy="0" r="42" fill="none" stroke="#0a0d12" stroke-width="3"/>
+      <circle cx="0" cy="0" r="42" fill="none" stroke="#2a3340" stroke-width="1"/>
+      <!-- fixed center boresight: yellow aircraft wings + dot -->
+      <g stroke="#ffe700" stroke-width="2" fill="none" stroke-linecap="round">
+        <line x1="-26" y1="0" x2="-10" y2="0"/>
+        <line x1="-10" y1="0" x2="-7"  y2="4"/>
+        <line x1=" 26" y1="0" x2=" 10" y2="0"/>
+        <line x1=" 10" y1="0" x2=" 7"  y2="4"/>
+      </g>
+      <circle cx="0" cy="0" r="1.6" fill="#ffe700"/>
+      <!-- pitch reference indicator at top of bezel -->
+      <polygon points="0,-44 -3,-39 3,-39" fill="#ffe700"/>
+      <!-- side tick marks every 30° for roll reference -->
+      <g stroke="#dde8ff" stroke-width="0.9" stroke-linecap="round" opacity="0.85">
+        <line x1="-42" y1="0" x2="-46" y2="0"/>
+        <line x1=" 42" y1="0" x2=" 46" y2="0"/>
+        <line x1="0" y1="-42" x2="0" y2="-46"/>
+        <line x1="0" y1=" 42" x2="0" y2=" 46"/>
       </g>
     </svg>
+  </template>
+
+  <div id="center"></div>
+  <div id="cb-adi-left"  class="cb-adi"></div>
+  <div id="cb-adi-right" class="cb-adi"></div>
+
+  <!-- v23: forced-landscape prompt -->
+  <div id="rotateOverlay">
+    <div class="icon"></div>
+    <div style="font-size:16px;font-weight:800;letter-spacing:.05em">ROTATE TO LANDSCAPE</div>
+    <div style="font-size:12px;opacity:.78;max-width:280px">Cardboard mode needs the phone held sideways.</div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
   <script src="chip-data.js"></script>
@@ -162,10 +253,16 @@
     const maxZ=10000, minZ=0;
     const state={x:chipUm.w/2, y:chipUm.h/2, z:2200};
 
-    // v22: stereo eye separation. The photon is conceptually ~5 µm wide, but to actually
-    // perceive depth of the chip features (5000+ µm away) we need an IPD that's a bit larger.
-    // 220 µm here gives a clear depth pop on the chip without exaggerating; tune freely.
-    const IPD_UM = 220;
+    // v23: stereo eye separation — tuned WAY down + dynamic TOE-IN convergence.
+    // v22 used fixed-parallel cameras with a 220 µm IPD. That produced large disparity
+    // for far-away objects, which is why high altitude looked "double" — the brain couldn't
+    // fuse the two views. Now the cameras toe in so they converge on whatever the photon
+    // is actually looking at, and the IPD is small. Result: zero disparity on the object of
+    // interest at any altitude, clean stereo fusion.
+    const IPD_UM = 70;
+    const CONV_MIN_UNIT = 0.5;   // 500 µm
+    const CONV_MAX_UNIT = 12.0;  // 12 mm
+    const CONV_DEFAULT_UNIT = 3.0;
 
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0c1622);
     const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.0005, 80);
@@ -464,43 +561,59 @@
       }
     }
 
-    // v22: aircraft-with-flaps LIFT. Looking at the horizon (pitch≈0) the photon climbs;
-    // looking visibly down beats the lift and you actually descend. Tuned so a small dive
-    // angle (~-13°) cancels the climb exactly.
-    const LIFT_FACTOR = 0.23;
+    // v23: stronger aircraft-with-flaps LIFT. At pitch=0 (looking at horizon) the photon
+    // climbs hard — you'd need a noticeable nose-down attitude (~-30°) to maintain altitude,
+    // or push the nose down further to actually dive.
+    const LIFT_FACTOR = 0.60;
 
     function renderStereo(){
-      // Each eye sees its own half of the screen. We shift the camera laterally along its
-      // own right vector by ±IPD/2 — that's what produces parallax / depth. Without this,
-      // both halves show identical pixels and the user sees "double", not "3D".
+      // v23: TOE-IN stereo. Each eye is offset along the camera-right vector by ±IPD/2,
+      // and BOTH eyes look at a common convergence point along the photon's gaze. The
+      // convergence point is the chip surface under the gaze when looking down, else a
+      // default mid distance. Result: the object you're focused on has zero pixel disparity
+      // (single, sharp), and only objects in front of / behind that depth have parallax.
+      // This is the standard fix for the "two of everything when far" problem.
       const halfW = innerWidth/2, h = innerHeight;
       camera.aspect = halfW/h;
-      // Slightly wider FOV per eye in cardboard so the lens magnification feels right.
       const prevFov = camera.fov;
       camera.fov = 88;
       camera.updateProjectionMatrix();
 
-      // Camera "right" (purely horizontal regardless of pitch, because yaw rotates around world Z)
+      // camera-right (purely horizontal) and current look vector
       const rx = Math.cos(yaw), ry = -Math.sin(yaw);
+      const f = lookDirection();
       const eyeSep = (IPD_UM / UM_PER_UNIT) / 2;
       const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
 
+      // Convergence distance: prefer where the look ray hits the chip top surface (z=0).
+      let convDist = CONV_DEFAULT_UNIT;
+      if (f.z < -0.03){
+        // f.z < 0 means looking downward; distance to z=0 plane along ray:
+        const tHit = -pz / f.z; // pz is in world units; chip top is at z=0 in world units
+        if (tHit > 0) convDist = tHit;
+      }
+      convDist = Math.max(CONV_MIN_UNIT, Math.min(CONV_MAX_UNIT, convDist));
+      const target = new THREE.Vector3(px + f.x*convDist, py + f.y*convDist, pz + f.z*convDist);
+
       renderer.setScissorTest(true);
 
-      // LEFT eye: shift camera left
+      // LEFT eye: shift left along camera-right, then aim at the convergence point
       camera.position.set(px - rx*eyeSep, py - ry*eyeSep, pz);
+      camera.lookAt(target);
       renderer.setViewport(0, 0, halfW, h);
       renderer.setScissor (0, 0, halfW, h);
       renderer.render(scene, camera);
 
-      // RIGHT eye: shift camera right (from original)
+      // RIGHT eye: shift right, aim at the same point
       camera.position.set(px + rx*eyeSep, py + ry*eyeSep, pz);
+      camera.lookAt(target);
       renderer.setViewport(halfW, 0, halfW, h);
       renderer.setScissor (halfW, 0, halfW, h);
       renderer.render(scene, camera);
 
-      // restore
+      // restore camera (position + orientation)
       camera.position.set(px, py, pz);
+      camera.lookAt(px + f.x, py + f.y, pz + f.z);
       renderer.setScissorTest(false);
       camera.fov = prevFov;
     }
@@ -563,8 +676,9 @@
       for (const el of document.querySelectorAll('.cbSpeed')) el.textContent = vStr;
       for (const el of document.querySelectorAll('.cbAlt'))   el.textContent = aStr;
 
-      // mini-maps (main + both cardboard halves)
+      // mini-maps (main + both cardboard halves) and ADI (main + both cardboard halves)
       paintAllMinis();
+      updateADI();
 
       const tt=t/1000;
       for (const h of halos){
@@ -590,6 +704,35 @@
       }
     }
     requestAnimationFrame(step);
+
+    // ---- v23: ADI plumbing. Clone the SVG template into the three ADI containers
+    // (the centered one for non-cardboard, plus one per eye for cardboard).
+    const adiTemplate = document.getElementById('adiTemplate');
+    const adiHosts = [
+      document.getElementById('center'),
+      document.getElementById('cb-adi-left'),
+      document.getElementById('cb-adi-right')
+    ].filter(Boolean);
+    const adiPitchGroups = [];
+    for (const host of adiHosts){
+      try {
+        const clone = adiTemplate.content.cloneNode(true);
+        host.appendChild(clone);
+        const g = host.querySelector('.adiPitch');
+        if (g) adiPitchGroups.push(g);
+      } catch(e){ /* template/clone unsupported — silently skip */ }
+    }
+    // Pixels of vertical horizon travel per radian of pitch. 50 ≈ realistic ladder range
+    // (~±50° before the ladder runs out of the bezel window).
+    const ADI_PX_PER_RAD = 50;
+    function updateADI(){
+      const dy = pitch * ADI_PX_PER_RAD;
+      // SVG +Y is DOWN. Pitch UP (positive) should move the horizon DOWN in the indicator
+      // (so more ground shows), matching how a real ADI behaves.
+      for (const g of adiPitchGroups){
+        g.setAttribute('transform', `translate(0 ${dy.toFixed(2)})`);
+      }
+    }
 
     let dragging=false,lastX=0,lastY=0;
     renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
@@ -637,6 +780,76 @@
       motionBtn.textContent='ENABLE PHONE MOTION';
     }
 
+    // v23: shared reset, callable from button, screen tap, and magnetometer spike.
+    function doReset(){
+      state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200;
+      targetYaw=yaw=0; targetPitch=pitch=-0.42;
+      initialOri=currentOri;
+      if (navigator.vibrate) { try{ navigator.vibrate(30);}catch(e){} }
+    }
+
+    // v23: force landscape on entering cardboard. Needs fullscreen + a user gesture;
+    // falls back silently to the CSS rotate-phone overlay if the platform refuses.
+    async function lockLandscape(){
+      try {
+        if (screen.orientation && screen.orientation.lock){
+          await screen.orientation.lock('landscape');
+        }
+      } catch(e){ /* unsupported — overlay still prompts the user */ }
+    }
+
+    // v23: keep the screen at full brightness — phones aggressively dim/sleep otherwise,
+    // which would be a disaster inside a cardboard headset.
+    let wakeLock = null;
+    async function requestWakeLock(){
+      try {
+        if ('wakeLock' in navigator){
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', ()=>{ wakeLock=null; });
+        }
+      } catch(e){ /* user can extend the phone's screen timeout manually */ }
+    }
+    document.addEventListener('visibilitychange', ()=>{
+      // If we lose the page (tab switch) and come back while still in cardboard, re-acquire.
+      if (document.visibilityState === 'visible' && cardboard && !wakeLock) requestWakeLock();
+    });
+
+    // v23: Cardboard reset = pull the magnet / press the button.
+    //   v2 cardboard buttons mechanically tap the screen via a capacitive lever
+    //     → ANY touchstart while in cardboard mode triggers reset.
+    //   v1 cardboard uses a sliding magnet whose pull spikes the magnetometer
+    //     → If the Magnetometer API exists, watch for a sharp field change.
+    let lastResetT = 0;
+    renderer.domElement.addEventListener('touchstart', ()=>{
+      if (!cardboard) return;
+      const now = performance.now();
+      if (now - lastResetT < 400) return; // debounce
+      lastResetT = now;
+      doReset();
+    }, {passive: true});
+    (function setupMagnet(){
+      if (!('Magnetometer' in window)) return;
+      try {
+        const sensor = new window.Magnetometer({frequency: 30});
+        let lastMag = null;
+        sensor.addEventListener('reading', ()=>{
+          const m = Math.sqrt(sensor.x*sensor.x + sensor.y*sensor.y + sensor.z*sensor.z);
+          if (lastMag !== null){
+            const d = Math.abs(m - lastMag);
+            if (d > 80 && cardboard){
+              const now = performance.now();
+              if (now - lastResetT > 700){
+                lastResetT = now;
+                doReset();
+              }
+            }
+          }
+          lastMag = m;
+        });
+        sensor.start();
+      } catch(e){ /* permission denied or hardware missing */ }
+    })();
+
     startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START FLYING'; };
     boostBtn.onclick=()=>{
       boost=!boost;
@@ -649,18 +862,20 @@
       cardboardBtn.textContent='CARDBOARD: '+(cardboard?'ON':'OFF');
       refreshUiVisibility();
       if (cardboard){
-        // Cardboard implies the phone is in the headset — phone motion is the ONLY way
-        // to look around. Auto-enable it (using the user-gesture tap on this very button
-        // to satisfy iOS Safari's permission requirement) and also auto-start flight so
-        // the user doesn't have to fish for buttons through the lens.
+        // Cardboard implies the phone is in the headset. Phone motion is the only way
+        // to look around, the screen MUST stay bright, orientation MUST be landscape, and
+        // we should be in fullscreen for the lens to fill properly.
         if (!motion) await enablePhoneMotion(false);
         if (!running){ running = true; startBtn.textContent = 'PAUSE'; }
-        // Request fullscreen so the cardboard split fills the lens — only works inside a
-        // user gesture, which we still have because the user just tapped this button.
         try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
+        await lockLandscape();
+        await requestWakeLock();
+      } else {
+        if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
+        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
       }
     };
-    document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200; targetYaw=yaw=0; targetPitch=pitch=-0.42; initialOri=currentOri; };
+    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
     motionBtn.onclick=async()=>{
       if(motion){
@@ -678,140 +893,46 @@
   </script>
 </body>
 </html>
-evFov;
-    }
-
-    function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
-      if(motion && currentOri && initialOri){
-        let da=(currentOri.alpha-initialOri.alpha)*Math.PI/180;
-        if(da>Math.PI)da-=2*Math.PI; if(da<-Math.PI)da+=2*Math.PI;
-        targetYaw=-da;
-        let db=(currentOri.beta -initialOri.beta )*Math.PI/180;
-        if(db>Math.PI)db-=2*Math.PI; if(db<-Math.PI)db+=2*Math.PI;
-        let dg=(currentOri.gamma-initialOri.gamma)*Math.PI/180;
-        if(dg> Math.PI/2)dg-=Math.PI; if(dg<-Math.PI/2)dg+=Math.PI;
-        const orientationDeg = (typeof window.orientation === 'number')
-          ? window.orientation
-          : ((screen.orientation && screen.orientation.angle) || 0);
-        const o = orientationDeg * Math.PI/180;
-        const tilt = db*Math.cos(o) - dg*Math.sin(o);
-        targetPitch = tilt - .42;
-        targetPitch = Math.max(-1.35, Math.min(1.25, targetPitch));
-      }
-      updateCamera();
-      const boostFactor = boost ? 5 : 1;
-      if(running){
-        const zForSpeed=Math.max(0,state.z);
-        const v=Math.max(20, (9 + (zForSpeed/10)*(1 + 1.65*Math.pow(zForSpeed/maxZ,1.45)))) * boostFactor;
-        const f=forward();
-        // LIFT: even at pitch=0 the photon gains altitude. Dive enough to cancel it and you
-        // start descending. f.z is sin(pitch); LIFT_FACTOR is the constant flap-lift added.
-        const vz = (f.z + LIFT_FACTOR);
-        const tx = state.x + f.x*v*dt;
-        const ty = state.y + f.y*v*dt;
-        const tz = state.z + vz *v*dt;
-        const tFloor = floorZAt(tx, ty);
-        const wallInTheWay = (tz < tFloor) && (tFloor > state.z + 1e-3);
-        if (wallInTheWay){
-          state.z = tFloor;
-        } else {
-          state.x = tx; state.y = ty;
-          state.z = Math.max(tFloor, tz);
+quest('screen');
+          wakeLock.addEventListener('release', ()=>{ wakeLock=null; });
         }
-        state.x=Math.max(0,Math.min(chipUm.w,state.x));
-        state.y=Math.max(0,Math.min(chipUm.h,state.y));
-        const floor=floorZAt(state.x,state.y);
-        state.z=Math.max(floor,Math.min(maxZ,state.z));
-      }
-      pulseVibrate(t);
-      const zForSpeed2=Math.max(0,state.z);
-      const v=Math.max(20, (9 + (zForSpeed2/10)*(1 + 1.65*Math.pow(zForSpeed2/maxZ,1.45)))) * boostFactor;
-      speedValue.textContent=v.toFixed(1);
-      const maxSpeed=(9 + (maxZ/10)*(1+1.65)) * 5;
-      const angle=-82+164*Math.max(0,Math.min(1,v/maxSpeed));
-      needle.style.transform=`rotate(${angle}deg)`;
-      const altFrac = Math.max(0, Math.min(1, state.z / maxZ));
-      altValue.textContent = state.z.toFixed(0);
-      altNeedle.style.transform = `rotate(${-82 + 164*altFrac}deg)`;
-
-      // mirror values into the cardboard HUDs
-      const vStr = v.toFixed(1), aStr = state.z.toFixed(0);
-      for (const el of document.querySelectorAll('.cbSpeed')) el.textContent = vStr;
-      for (const el of document.querySelectorAll('.cbAlt'))   el.textContent = aStr;
-
-      // mini-maps (main + both cardboard halves)
-      paintAllMinis();
-
-      const tt=t/1000;
-      for (const h of halos){
-        const breath = 0.55 + 0.45*Math.sin(tt*2.4 + h.userData.phase);
-        h.material.opacity = 0.55 + 0.45*breath;
-        const s = 1 + 0.10*breath;
-        h.scale.set(s, s, 1);
-      }
-      const squidPulse = 0.5 + 0.5*Math.sin(tt*1.6);
-      for (const p of idcPulses){
-        p.material.opacity = 0.10 + 0.90*squidPulse;
-        const s = 0.55 + 0.55*squidPulse;
-        p.scale.set(s, s, 1);
-      }
-      if(cardboard){
-        renderStereo();
-      } else {
-        camera.aspect=innerWidth/innerHeight;
-        camera.fov = 70;
-        camera.updateProjectionMatrix();
-        renderer.setViewport(0,0,innerWidth,innerHeight);
-        renderer.render(scene,camera);
-      }
+      } catch(e){ /* user can extend the phone's screen timeout manually */ }
     }
-    requestAnimationFrame(step);
+    document.addEventListener('visibilitychange', ()=>{
+      if (document.visibilityState === 'visible' && cardboard && !wakeLock) requestWakeLock();
+    });
 
-    let dragging=false,lastX=0,lastY=0;
-    renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
-    addEventListener('pointerup',()=>dragging=false);
-    addEventListener('pointermove',e=>{ if(!dragging||motion) return; targetYaw-=(e.clientX-lastX)*0.005; targetPitch-=(e.clientY-lastY)*0.005; lastX=e.clientX; lastY=e.clientY; });
-    addEventListener('deviceorientation',e=>{ currentOri={alpha:e.alpha||0,beta:e.beta||0,gamma:e.gamma||0}; }, true);
-
-    const startBtn=document.getElementById('startBtn');
-    const boostBtn=document.getElementById('boostBtn');
-    const cardboardBtn=document.getElementById('cardboardBtn');
-    const motionBtn=document.getElementById('motionBtn');
-
-    function refreshUiVisibility(){
-      // The 'cardboard' body class drives all the CSS — vertical button stack, hidden motion
-      // button, hidden main HUD, visible per-eye cardboard HUDs.
-      document.body.classList.toggle('cardboard', cardboard);
-    }
-
-    // Phone motion enable, factored out so cardboard mode can auto-enable it.
-    async function enablePhoneMotion(showStatus){
-      try{
-        if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){
-          const r=await DeviceOrientationEvent.requestPermission();
-          if(r!=='granted'){
-            if (showStatus){ status.classList.remove('hidden'); status.textContent='Phone motion permission denied.'; }
-            return false;
+    // v23: Cardboard reset = pull the magnet / press the button.
+    let lastResetT = 0;
+    renderer.domElement.addEventListener('touchstart', ()=>{
+      if (!cardboard) return;
+      const now = performance.now();
+      if (now - lastResetT < 400) return;
+      lastResetT = now;
+      doReset();
+    }, {passive: true});
+    (function setupMagnet(){
+      if (!('Magnetometer' in window)) return;
+      try {
+        const sensor = new window.Magnetometer({frequency: 30});
+        let lastMag = null;
+        sensor.addEventListener('reading', ()=>{
+          const m = Math.sqrt(sensor.x*sensor.x + sensor.y*sensor.y + sensor.z*sensor.z);
+          if (lastMag !== null){
+            const d = Math.abs(m - lastMag);
+            if (d > 80 && cardboard){
+              const now = performance.now();
+              if (now - lastResetT > 700){
+                lastResetT = now;
+                doReset();
+              }
+            }
           }
-        }
-        motion=true;
-        motionBtn.textContent='DISABLE PHONE MOTION';
-        initialOri=currentOri||{alpha:0,beta:0,gamma:0};
-        if (showStatus){
-          status.classList.remove('hidden');
-          status.textContent='Phone motion enabled. Move/tilt the phone; touch drag is disabled while motion is on.';
-          setTimeout(()=>status.classList.add('hidden'),5000);
-        }
-        return true;
-      }catch(err){
-        if (showStatus){ status.classList.remove('hidden'); status.textContent='Motion error: '+err.message; }
-        return false;
-      }
-    }
-    function disablePhoneMotion(){
-      motion=false;
-      motionBtn.textContent='ENABLE PHONE MOTION';
-    }
+          lastMag = m;
+        });
+        sensor.start();
+      } catch(e){}
+    })();
 
     startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START FLYING'; };
     boostBtn.onclick=()=>{
@@ -825,18 +946,17 @@ evFov;
       cardboardBtn.textContent='CARDBOARD: '+(cardboard?'ON':'OFF');
       refreshUiVisibility();
       if (cardboard){
-        // Cardboard implies the phone is in the headset — phone motion is the ONLY way
-        // to look around. Auto-enable it (using the user-gesture tap on this very button
-        // to satisfy iOS Safari's permission requirement) and also auto-start flight so
-        // the user doesn't have to fish for buttons through the lens.
         if (!motion) await enablePhoneMotion(false);
         if (!running){ running = true; startBtn.textContent = 'PAUSE'; }
-        // Request fullscreen so the cardboard split fills the lens — only works inside a
-        // user gesture, which we still have because the user just tapped this button.
         try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
+        await lockLandscape();
+        await requestWakeLock();
+      } else {
+        if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
+        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
       }
     };
-    document.getElementById('resetBtn').onclick=()=>{ state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200; targetYaw=yaw=0; targetPitch=pitch=-0.42; initialOri=currentOri; };
+    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
     motionBtn.onclick=async()=>{
       if(motion){
@@ -849,6 +969,20 @@ evFov;
       }
     };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
+EEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
+    motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); status.classList.remove('hidden'); status.textContent='Phone motion disabled.'; setTimeout(()=>status.classList.add('hidden'),3500); } else { await enablePhoneMotion(true); } };
+    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
+ize(innerWidth,innerHeight);});
     refreshUiVisibility();
   })();
   </script>
