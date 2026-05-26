@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v27 (Cardboard close-up stereo, stacked HUD)</title>
+  <title>Quantum Chip Photon VR v28 (raycast vergence)</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     /* default (non-cardboard) UI */
@@ -642,7 +642,7 @@
         const d3 = Math.sqrt(dxy*dxy + state.z*state.z);
         if (d3 < minD) minD = d3;
       }
-      const RANGE = 300;
+      const RANGE = 600; // v28: vibration starts twice as far from the SQUIDs
       if (minD > RANGE) return;
       const f = 1 - (minD / RANGE);
       const interval = 420 - 365 * f;
@@ -657,6 +657,38 @@
     // climbs hard — you'd need a noticeable nose-down attitude (~-30°) to maintain altitude,
     // or push the nose down further to actually dive.
     const LIFT_FACTOR = 0.60;
+
+    // v28: depth-probe stereo. Cast a ray from the camera in the look direction every
+    // frame and use the FIRST geometry hit as the convergence distance. That way the eyes
+    // converge on whatever the photon is actually staring at — chip surface, a SQUID pad,
+    // a dielectric crossover, anything — instead of always trying to converge on z=0.
+    // Smoothed with a low-pass so the disparity doesn't jitter when the ray skims edges.
+    const stereoRaycaster = new THREE.Raycaster();
+    stereoRaycaster.far = CONV_MAX_UNIT + 1;
+    let smoothConvDist = CONV_DEFAULT_UNIT;
+    function probeConvergence(){
+      const dir = lookDirection();
+      stereoRaycaster.set(camera.position, dir);
+      const targets = [];
+      if (nbMesh) targets.push(nbMesh);
+      if (detailGroup) targets.push(detailGroup);
+      if (base) targets.push(base);
+      let raw = null;
+      try {
+        const hits = stereoRaycaster.intersectObjects(targets, true);
+        if (hits.length) raw = hits[0].distance;
+      } catch(e){}
+      // Fallback: ray-plane intercept with the chip top surface (z=0)
+      if (raw === null && dir.z < -0.03){
+        const tHit = -camera.position.z / dir.z;
+        if (tHit > 0) raw = tHit;
+      }
+      if (raw === null) raw = CONV_DEFAULT_UNIT;
+      raw = Math.max(CONV_MIN_UNIT, Math.min(CONV_MAX_UNIT, raw));
+      // Low-pass — ~6 frames to settle, prevents disparity jitter at edges
+      smoothConvDist += (raw - smoothConvDist) * 0.18;
+      return smoothConvDist;
+    }
 
     function renderStereo(){
       // v23: TOE-IN stereo. Each eye is offset along the camera-right vector by ±IPD/2,
@@ -680,14 +712,9 @@
       const f = lookDirection();
       const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
 
-      // Convergence distance: prefer where the look ray hits the chip top surface (z=0).
-      let convDist = CONV_DEFAULT_UNIT;
-      if (f.z < -0.03){
-        // f.z < 0 means looking downward; distance to z=0 plane along ray:
-        const tHit = -pz / f.z; // pz is in world units; chip top is at z=0 in world units
-        if (tHit > 0) convDist = tHit;
-      }
-      convDist = Math.max(CONV_MIN_UNIT, Math.min(CONV_MAX_UNIT, convDist));
+      // v28: convergence comes from the raycast depth probe — always points at whatever
+      // the photon is actually staring at, at the actual distance to that thing.
+      const convDist = probeConvergence();
       // v27: shrink eye-separation when the target is close, so angular disparity stays
       // within the comfortable fusion range. ipd_max = 2 * convDist * tan(MAX_DISPARITY/2).
       const ipdMaxUnit = 2 * convDist * Math.tan(MAX_DISPARITY_RAD/2);
@@ -1054,6 +1081,48 @@ alse);
 </body>
 </html>
 ; } catch(e){}
+      }
+    };
+    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
+    document.getElementById('fullBtn').onclick=async()=>{
+      try{
+        if(!document.fullscreenElement){
+          await document.documentElement.requestFullscreen();
+          document.getElementById('fullBtn').textContent='EXIT FS';
+        } else {
+          await document.exitFullscreen();
+          document.getElementById('fullBtn').textContent='FULL SCREEN';
+        }
+      }catch(err){
+        status.classList.remove('hidden');
+        status.textContent='Fullscreen unavailable: '+err.message;
+      }
+    };
+    motionBtn.onclick=async()=>{
+      if(motion){
+        disablePhoneMotion();
+        status.classList.remove('hidden');
+        status.textContent='Phone motion disabled.';
+        setTimeout(()=>status.classList.add('hidden'),3500);
+      } else {
+        await enablePhoneMotion(true);
+      }
+    };
+    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
+shUiVisibility();
+  })();
+  </script>
+</body>
+</html>
+;
+      } else {
+        if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
+        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
       }
     };
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
