@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v25 (Cardboard, quarter-res GDS, half-z)</title>
+  <title>Quantum Chip Photon VR v26 (Cardboard, log-depth, no strokes)</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     /* default (non-cardboard) UI */
@@ -63,6 +63,8 @@
       font-family:system-ui,-apple-system,sans-serif;
     }
     body.cardboard .cb-hud{display:flex}
+    /* v26: dashboard for ONE eye only — same eye as the ADI. */
+    body.cardboard #cb-hud-right{display:none}
     .cb-hud .cell{text-align:center;color:#fff;min-width:30px}
     .cb-hud .lbl{font-size:6px;opacity:.78;text-transform:uppercase;letter-spacing:.06em;line-height:1}
     .cb-hud .val{font-size:10px;font-weight:900;line-height:1;margin:1px 0}
@@ -272,10 +274,9 @@
     const chipUm={w:bbox[2]-bbox[0], h:bbox[3]-bbox[1]};
     const UM_PER_UNIT=1000;
     const chipW=chipUm.w/UM_PER_UNIT, chipH=chipUm.h/UM_PER_UNIT;
-    // v25: halve Nb thickness — this is the base for ALL stacked layer z-positions and
-     // for layers 146/147 (which are NB_THICKNESS_UM × multipliers). Halving here cuts the
-     // overall z-resolution of the chip in half automatically.
-     const NB_THICKNESS_UM=0.5;
+    // v26: Nb thickness back to 1 µm visual. (Real Nb is 200 nm but the photon needs
+    // enough vertical slack to drop into the etched openings cleanly.)
+    const NB_THICKNESS_UM=1;
     const maxZ=10000, minZ=0;
     const state={x:chipUm.w/2, y:chipUm.h/2, z:2200};
 
@@ -291,9 +292,18 @@
     const CONV_DEFAULT_UNIT = 3.0;
 
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0c1622);
-    const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.0005, 80);
+    // v26: near plane pushed from 0.5 µm out to 10 µm. The old 0.0005 covered a
+    // 160 000:1 depth range, which left the buffer with almost no precision in the chip
+    // mid-distances — that's the textbook cause of "thin features flicker far away,
+    // resolve up close." 10 µm is still well below our photon scale (~5 µm) so we don't
+    // visibly clip.
+    const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.01, 80);
     camera.up.set(0,0,1);
-    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
+    // v26: logarithmic depth buffer — distributes z precision LOGARITHMICALLY across the
+    // near→far range instead of front-loading it near the camera. With layers stacked at
+    // 1.2 / 1.55 / 1.95 µm above Nb, this is what stops them from z-fighting each other
+    // and the painted texture overlay above.
+    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance',logarithmicDepthBuffer:true});
     // v24: lower pixel-ratio cap (1.75) to ease GPU load and cut the per-pixel flicker
     // we were seeing on dense polygons. Cardboard further drops to 1.25 in renderStereo.
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.75)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
@@ -308,19 +318,12 @@
     const baseMat=new THREE.MeshStandardMaterial({color:0x121417,roughness:.95,metalness:.01});
     const base=new THREE.Mesh(baseGeo,baseMat); base.position.set(0,0,-siThicknessUnit/2); scene.add(base);
 
-    // ---- v25: GDS polygon decimation, now even more aggressive (stride 4 — keep every
-    // 4th vertex). That's another ×2 reduction in x,y on top of v24, so a polygon that
-    // originally had 100 vertices now has ~25. Degenerate / already-small polygons are
-    // left alone. Applied to every layer that becomes 3D geometry, not just trench134.
-    function decimatePoly(p){
-      if (!p || p.length <= 8) return p;
-      const out = [];
-      for (let i = 0; i < p.length; i += 4) out.push(p[i]);
-      if (out.length < 3) return p;
-      const a = out[0], b = out[out.length-1];
-      if (a[0] !== b[0] || a[1] !== b[1]) out.push([a[0], a[1]]);
-      return out;
-    }
+    // ---- v26: decimation reverted to a pass-through (full xy resolution restored).
+    // The "long lines that flicker at distance" turned out to be the 3-px polygon STROKES
+    // painted into the canvas overlay (see makeTexture below) plus z-fighting between
+    // closely-stacked layers — not the polygon vertex count. Hook kept here in case we
+    // want to dial it back in for very low-end devices.
+    function decimatePoly(p){ return p; }
     // Replace each layer's polygon list in-place with the halved version so EVERY
     // downstream consumer (trench cutout, 3D extrusion, minimap, collision) sees the
     // simplified geometry.
@@ -379,19 +382,42 @@
         '131':'rgba(255,150,250,.95)'
       };
       // v15: 146/147 are 3D meshes now, no longer painted on the texture.
+      // v26: NO MORE STROKES. The 3-px outlines around every painted polygon were the
+      // long bright lines that flickered at distance — at chip distance, a 3-px stroke on
+      // a 12288-px canvas is sub-pixel, so it aliased into long shimmering streaks every
+      // frame. Filled-only now, with crisp edges from the polygon fill itself.
       const order=['131','136','137'];
-      for(const layer of order){ const polys=data.layers[layer]||[]; g.fillStyle=styles[layer]||'rgba(255,255,255,.6)';
-        g.strokeStyle='rgba(255,255,255,.70)'; g.lineWidth=3;
-        for(const p of polys){ if(!p||p.length<3) continue; g.beginPath(); const a=map(p[0]); g.moveTo(a[0],a[1]); for(let i=1;i<p.length;i++){const m=map(p[i]); g.lineTo(m[0],m[1]);} g.closePath(); g.fill(); g.stroke(); }
+      for(const layer of order){
+        const polys=data.layers[layer]||[];
+        g.fillStyle=styles[layer]||'rgba(255,255,255,.6)';
+        for(const p of polys){
+          if(!p||p.length<3) continue;
+          g.beginPath();
+          const a=map(p[0]); g.moveTo(a[0],a[1]);
+          for(let i=1;i<p.length;i++){ const m=map(p[i]); g.lineTo(m[0],m[1]); }
+          g.closePath();
+          g.fill();
+        }
       }
-      g.fillStyle='rgba(255,255,255,.75)'; g.font='36px system-ui'; g.fillText('GDS overlay v13: 131/136/137/146/147 (134 = real 3D etched holes)',40,70);
       const tex=new THREE.CanvasTexture(c);
-      tex.anisotropy=Math.min(8, renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1);
+      // v26: max-out anisotropic filtering — keeps thin GDS features (CPW gaps, junction
+      // leads) crisp at oblique viewing angles instead of moiré-ing.
+      const maxA = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1;
+      tex.anisotropy = maxA;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.generateMipmaps = true;
       tex.needsUpdate=true; return tex;
     }
-    const topMat=new THREE.MeshBasicMaterial({map:makeTexture(),side:THREE.DoubleSide,transparent:true,depthWrite:false});
+    // v26: polygonOffset pushes this textured plane SLIGHTLY toward the camera at
+    // render-time, so it stops z-fighting with the Nb extrusion underneath. Combined with
+    // logarithmicDepthBuffer this kills the painted-texture shimmer at altitude.
+    const topMat=new THREE.MeshBasicMaterial({
+      map:makeTexture(), side:THREE.DoubleSide,
+      transparent:true, depthWrite:false,
+      polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2
+    });
     const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat);
-    top.position.z = nbHeight + 0.0001; // sit just above the Nb top so layer overlays read clearly
+    top.position.z = nbHeight + 0.002; // bigger gap above the Nb top, with polygonOffset on top of that
     scene.add(top);
     const edge=new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({color:0x88aaff,transparent:true,opacity:.35})); edge.position.copy(base.position); scene.add(edge);
 
@@ -431,11 +457,13 @@
         } catch(e){}
       }
     }
-    // v25: per-layer thicknesses and z-offsets halved so the whole stack is lower-profile
-    // and the layers don't z-fight each other as aggressively.
-    addLayerMeshes('136', 0xffe8b8, 0x402200, 0.35, 0.065, NB_THICKNESS_UM + 0.025);
-    addLayerMeshes('137', 0xffd070, 0x553200, 0.55, 0.065, NB_THICKNESS_UM + 0.10);
-    addLayerMeshes('131', 0xff66ee, 0xff44cc, 1.5, 0.04, NB_THICKNESS_UM + 0.17, {roughness:0.2, metalness:0.4});
+    // v26: layer thicknesses restored, BUT z-offsets pushed apart so we have a clearer
+    // "altitude budget" between layers and the depth buffer can resolve each one cleanly.
+    // (Old offsets +0.05 / +0.20 / +0.34 were too tight for a depth buffer covering 0.01
+    // to 80 world units — adjacent layers shimmered against each other.)
+    addLayerMeshes('136', 0xffe8b8, 0x402200, 0.35, 0.13, NB_THICKNESS_UM + 0.20);
+    addLayerMeshes('137', 0xffd070, 0x553200, 0.55, 0.13, NB_THICKNESS_UM + 0.55);
+    addLayerMeshes('131', 0xff66ee, 0xff44cc, 1.5, 0.08, NB_THICKNESS_UM + 0.95, {roughness:0.2, metalness:0.4});
 
     // ---- v15: bandaid crossover dielectric (layer 146)
     const D146_THICK = 1.5 * NB_THICKNESS_UM;
@@ -955,6 +983,47 @@
 </body>
 </html>
 ion){
+        disablePhoneMotion();
+        status.classList.remove('hidden');
+        status.textContent='Phone motion disabled.';
+        setTimeout(()=>status.classList.add('hidden'),3500);
+      } else {
+        await enablePhoneMotion(true);
+      }
+    };
+    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
+alse);
+        if (!running){ running = true; startBtn.textContent = 'PAUSE'; }
+        try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
+        await lockLandscape();
+        await requestWakeLock();
+      } else {
+        if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
+        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+      }
+    };
+    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
+    document.getElementById('fullBtn').onclick=async()=>{
+      try{
+        if(!document.fullscreenElement){
+          await document.documentElement.requestFullscreen();
+          document.getElementById('fullBtn').textContent='EXIT FS';
+        } else {
+          await document.exitFullscreen();
+          document.getElementById('fullBtn').textContent='FULL SCREEN';
+        }
+      }catch(err){
+        status.classList.remove('hidden');
+        status.textContent='Fullscreen unavailable: '+err.message;
+      }
+    };
+    motionBtn.onclick=async()=>{
+      if(motion){
         disablePhoneMotion();
         status.classList.remove('hidden');
         status.textContent='Phone motion disabled.';
