@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v23 (Cardboard, ADI)</title>
+  <title>Quantum Chip Photon VR v24 (Cardboard, ADI, half-res GDS)</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     /* default (non-cardboard) UI */
@@ -32,15 +32,19 @@
 
     /* CARDBOARD MODE — body class toggled by JS */
     body.cardboard #hud{display:none !important}
+    /* v24: Buttons are pushed hard against the LEFT screen edge and made tiny, so the
+       cardboard lenses (which crop ~10–15% from each edge) won't show them. Only visible
+       when you pop the phone out of the headset to tap them. */
     body.cardboard #ui{
-      display:flex; flex-direction:column; gap:4px;
-      left:4px; top:50%; transform:translateY(-50%);
+      display:flex; flex-direction:column; gap:2px;
+      left:0; top:50%; transform:translateY(-50%);
       max-width:none;
     }
     body.cardboard #ui button{
-      font-size:8px; padding:3px 6px;
-      box-shadow:none; opacity:.85;
-      min-width:74px;
+      font-size:6px; padding:2px 3px;
+      box-shadow:none; opacity:.55;
+      min-width:42px; border-radius:3px;
+      letter-spacing:0;
     }
     body.cardboard #motionBtn{display:none}     /* always-on in cardboard, no need for toggle */
     body.cardboard #fullBtn{display:none}       /* cardboard is opened from fullscreen already */
@@ -65,24 +69,37 @@
     .cb-hud .unit{font-size:6px;opacity:.78;line-height:1}
     .cb-hud canvas{display:block;width:38px;height:38px;border-radius:3px;background:#101418;border:1px solid rgba(255,255,255,.16)}
     .cb-hud img{height:32px;max-height:32px;width:auto;display:block;object-fit:contain}
-    /* The phone is held landscape inside the cardboard. Each eye sees roughly the
-       central 70% of its half — so we anchor the HUD INSIDE that central area, slightly
-       to the right of the half's center, and well clear of the top/bottom edges. */
-    #cb-hud-left  { top:7vh; left:30vw; }
-    #cb-hud-right { top:7vh; right:5vw; }
+    /* v24: cardboard HUD now only holds the minimap + Qarakal logo (speed and altitude
+       have moved next to the ADI). One per eye half, near the top edge so it doesn't
+       compete with the ADI for attention. */
+    #cb-hud-left  { top:5vh; left:25vw; transform:translateX(-50%); }
+    #cb-hud-right { top:5vh; left:75vw; transform:translateX(-50%); }
 
-    /* v23: per-eye Attitude Director Indicator (ADI). Two copies, one in each eye half,
-       so the brain fuses them into one stable instrument floating in front of the photon. */
+    /* v24: per-eye Attitude Director Indicator (ADI). Centered horizontally inside each
+       eye half AND vertically — so the brain fuses the two copies into a single ADI that
+       appears perfectly centered in the user's visual field. A compact speed/alt readout
+       sits directly above it. */
     .cb-adi{
       display:none; position:fixed; z-index:11; pointer-events:none;
-      width:130px; height:130px;
+      width:118px;
       filter:drop-shadow(0 0 4px rgba(0,0,0,.6));
+      text-align:center;
+      font-family:system-ui,-apple-system,sans-serif;
     }
     body.cardboard .cb-adi{display:block}
+    .cb-adi .adi-svg{display:block;width:118px;height:118px;overflow:hidden}
     .cb-adi svg{display:block;width:100%;height:100%;overflow:hidden}
-    /* anchor each ADI inside the lens-visible center area of its eye half */
-    #cb-adi-left  { bottom:6vh; left:18vw;  transform:translateX(-50%); }
-    #cb-adi-right { bottom:6vh; right:18vw; transform:translateX(50%);  }
+    /* compact dense readout sitting right above the ADI */
+    .cb-adi .adi-readout{
+      color:#fff; font-size:11px; font-weight:800;
+      margin-bottom:3px; letter-spacing:.02em;
+      text-shadow:0 0 4px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.85);
+    }
+    .cb-adi .adi-readout .sep{opacity:.6; margin:0 4px}
+    .cb-adi .adi-readout .u{font-size:8px; opacity:.78; margin-left:1px}
+    /* horizontally centred in each eye half, vertically centred in the screen */
+    #cb-adi-left  { top:50vh; left:25vw; transform:translate(-50%,-50%); }
+    #cb-adi-right { top:50vh; left:75vw; transform:translate(-50%,-50%); }
 
     /* v23: rotate-phone prompt — covers the screen if the user is in portrait. */
     #rotateOverlay{
@@ -148,17 +165,14 @@
     </div>
   </div>
 
-  <!-- cardboard HUDs — one per eye half, smaller, inset from edges so visible through the lens -->
+  <!-- v24: cardboard HUDs now only carry the minimap + Qarakal logo; speed and altitude
+       moved into the ADI readout below. -->
   <div id="cb-hud-left" class="cb-hud">
     <canvas class="cb-map" width="120" height="120"></canvas>
-    <div class="cell"><div class="lbl">v</div><div class="val cbSpeed">—</div><div class="unit">µm/s</div></div>
-    <div class="cell"><div class="lbl">alt</div><div class="val cbAlt">—</div><div class="unit">µm</div></div>
     <img class="cbLogo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.style.display='none'" />
   </div>
   <div id="cb-hud-right" class="cb-hud">
     <canvas class="cb-map" width="120" height="120"></canvas>
-    <div class="cell"><div class="lbl">v</div><div class="val cbSpeed">—</div><div class="unit">µm/s</div></div>
-    <div class="cell"><div class="lbl">alt</div><div class="val cbAlt">—</div><div class="unit">µm</div></div>
     <img class="cbLogo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.style.display='none'" />
   </div>
 
@@ -224,8 +238,14 @@
   </template>
 
   <div id="center"></div>
-  <div id="cb-adi-left"  class="cb-adi"></div>
-  <div id="cb-adi-right" class="cb-adi"></div>
+  <div id="cb-adi-left"  class="cb-adi">
+    <div class="adi-readout"><span class="cbSpeed">—</span><span class="u">µm/s</span><span class="sep">|</span><span class="cbAlt">—</span><span class="u">µm</span></div>
+    <div class="adi-svg"></div>
+  </div>
+  <div id="cb-adi-right" class="cb-adi">
+    <div class="adi-readout"><span class="cbSpeed">—</span><span class="u">µm/s</span><span class="sep">|</span><span class="cbAlt">—</span><span class="u">µm</span></div>
+    <div class="adi-svg"></div>
+  </div>
 
   <!-- v23: forced-landscape prompt -->
   <div id="rotateOverlay">
@@ -268,7 +288,9 @@
     const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.0005, 80);
     camera.up.set(0,0,1);
     const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
-    renderer.setPixelRatio(Math.min(devicePixelRatio||1,3.5)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
+    // v24: lower pixel-ratio cap (1.75) to ease GPU load and cut the per-pixel flicker
+    // we were seeing on dense polygons. Cardboard further drops to 1.25 in renderStereo.
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.75)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
     // v22: a touch more light. Nb is now significantly brighter (see material below), so
     // we keep ambient moderate so the dark Si still reads as dark.
     scene.add(new THREE.HemisphereLight(0xffffff,0x556677,1.85));
@@ -279,6 +301,30 @@
     // Silicon stays dark — almost matte black — so the bright Nb really pops next to it.
     const baseMat=new THREE.MeshStandardMaterial({color:0x121417,roughness:.95,metalness:.01});
     const base=new THREE.Mesh(baseGeo,baseMat); base.position.set(0,0,-siThicknessUnit/2); scene.add(base);
+
+    // ---- v24: GDS polygon decimation — halves vertex resolution in both x and y to cut
+    // flicker / z-fight shimmer from too many tiny features. We keep every other vertex,
+    // re-close the loop, and skip if the polygon would shrink to a degenerate triangle.
+    // This is applied to every layer that becomes 3D geometry, not just trench134.
+    function decimatePoly(p){
+      if (!p || p.length <= 6) return p;
+      const out = [];
+      for (let i = 0; i < p.length; i += 2) out.push(p[i]);
+      if (out.length < 3) return p;
+      // Make sure the polygon stays closed (first == last).
+      const a = out[0], b = out[out.length-1];
+      if (a[0] !== b[0] || a[1] !== b[1]) out.push([a[0], a[1]]);
+      return out;
+    }
+    // Replace each layer's polygon list in-place with the halved version so EVERY
+    // downstream consumer (trench cutout, 3D extrusion, minimap, collision) sees the
+    // simplified geometry.
+    const _LAYERS_TO_DECIMATE = ['131','134','136','137','146','147'];
+    for (const lid of _LAYERS_TO_DECIMATE){
+      const polys = data.layers[lid];
+      if (!polys) continue;
+      data.layers[lid] = polys.map(decimatePoly);
+    }
 
     // ---- v13: real 3D Nb layer with etched holes (layer 134). Photon can't pass through it.
     function nbMapPt(p){ return [(p[0]-bbox[0]-chipUm.w/2)/UM_PER_UNIT, (p[1]-bbox[1]-chipUm.h/2)/UM_PER_UNIT]; }
@@ -578,6 +624,10 @@
       const prevFov = camera.fov;
       camera.fov = 88;
       camera.updateProjectionMatrix();
+      // v24: further drop the renderer pixel ratio in cardboard — fewer pixels per eye =
+      // less aliasing / less flicker on the dense GDS geometry.
+      const prevPR = renderer.getPixelRatio();
+      if (prevPR > 1.25) renderer.setPixelRatio(1.25);
 
       // camera-right (purely horizontal) and current look vector
       const rx = Math.cos(yaw), ry = -Math.sin(yaw);
@@ -611,11 +661,12 @@
       renderer.setScissor (halfW, 0, halfW, h);
       renderer.render(scene, camera);
 
-      // restore camera (position + orientation)
+      // restore camera (position + orientation) and pixel ratio
       camera.position.set(px, py, pz);
       camera.lookAt(px + f.x, py + f.y, pz + f.z);
       renderer.setScissorTest(false);
       camera.fov = prevFov;
+      if (prevPR !== renderer.getPixelRatio()) renderer.setPixelRatio(prevPR);
     }
 
     function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
@@ -708,10 +759,12 @@
     // ---- v23: ADI plumbing. Clone the SVG template into the three ADI containers
     // (the centered one for non-cardboard, plus one per eye for cardboard).
     const adiTemplate = document.getElementById('adiTemplate');
+    // v24: in cardboard the SVG goes INTO the .adi-svg sub-container (the readout sits
+     // above it). For non-cardboard the SVG goes directly into #center.
     const adiHosts = [
       document.getElementById('center'),
-      document.getElementById('cb-adi-left'),
-      document.getElementById('cb-adi-right')
+      document.querySelector('#cb-adi-left  .adi-svg'),
+      document.querySelector('#cb-adi-right .adi-svg')
     ].filter(Boolean);
     const adiPitchGroups = [];
     for (const host of adiHosts){
@@ -814,95 +867,6 @@
       if (document.visibilityState === 'visible' && cardboard && !wakeLock) requestWakeLock();
     });
 
-    // v23: Cardboard reset = pull the magnet / press the button.
-    //   v2 cardboard buttons mechanically tap the screen via a capacitive lever
-    //     → ANY touchstart while in cardboard mode triggers reset.
-    //   v1 cardboard uses a sliding magnet whose pull spikes the magnetometer
-    //     → If the Magnetometer API exists, watch for a sharp field change.
-    let lastResetT = 0;
-    renderer.domElement.addEventListener('touchstart', ()=>{
-      if (!cardboard) return;
-      const now = performance.now();
-      if (now - lastResetT < 400) return; // debounce
-      lastResetT = now;
-      doReset();
-    }, {passive: true});
-    (function setupMagnet(){
-      if (!('Magnetometer' in window)) return;
-      try {
-        const sensor = new window.Magnetometer({frequency: 30});
-        let lastMag = null;
-        sensor.addEventListener('reading', ()=>{
-          const m = Math.sqrt(sensor.x*sensor.x + sensor.y*sensor.y + sensor.z*sensor.z);
-          if (lastMag !== null){
-            const d = Math.abs(m - lastMag);
-            if (d > 80 && cardboard){
-              const now = performance.now();
-              if (now - lastResetT > 700){
-                lastResetT = now;
-                doReset();
-              }
-            }
-          }
-          lastMag = m;
-        });
-        sensor.start();
-      } catch(e){ /* permission denied or hardware missing */ }
-    })();
-
-    startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START FLYING'; };
-    boostBtn.onclick=()=>{
-      boost=!boost;
-      boostBtn.textContent='BOOST: '+(boost?'ON x5':'OFF');
-      boostBtn.classList.toggle('active', boost);
-      if (boost && navigator.vibrate) { try{ navigator.vibrate(20);}catch(e){} }
-    };
-    cardboardBtn.onclick=async()=>{
-      cardboard=!cardboard;
-      cardboardBtn.textContent='CARDBOARD: '+(cardboard?'ON':'OFF');
-      refreshUiVisibility();
-      if (cardboard){
-        // Cardboard implies the phone is in the headset. Phone motion is the only way
-        // to look around, the screen MUST stay bright, orientation MUST be landscape, and
-        // we should be in fullscreen for the lens to fill properly.
-        if (!motion) await enablePhoneMotion(false);
-        if (!running){ running = true; startBtn.textContent = 'PAUSE'; }
-        try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
-        await lockLandscape();
-        await requestWakeLock();
-      } else {
-        if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
-        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
-      }
-    };
-    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
-    document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
-    motionBtn.onclick=async()=>{
-      if(motion){
-        disablePhoneMotion();
-        status.classList.remove('hidden');
-        status.textContent='Phone motion disabled. Touch-drag look is active again.';
-        setTimeout(()=>status.classList.add('hidden'),3500);
-      } else {
-        await enablePhoneMotion(true);
-      }
-    };
-    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-quest('screen');
-          wakeLock.addEventListener('release', ()=>{ wakeLock=null; });
-        }
-      } catch(e){ /* user can extend the phone's screen timeout manually */ }
-    }
-    document.addEventListener('visibilitychange', ()=>{
-      if (document.visibilityState === 'visible' && cardboard && !wakeLock) requestWakeLock();
-    });
-
-    // v23: Cardboard reset = pull the magnet / press the button.
     let lastResetT = 0;
     renderer.domElement.addEventListener('touchstart', ()=>{
       if (!cardboard) return;
@@ -922,10 +886,7 @@ quest('screen');
             const d = Math.abs(m - lastMag);
             if (d > 80 && cardboard){
               const now = performance.now();
-              if (now - lastResetT > 700){
-                lastResetT = now;
-                doReset();
-              }
+              if (now - lastResetT > 700){ lastResetT = now; doReset(); }
             }
           }
           lastMag = m;
@@ -934,7 +895,7 @@ quest('screen');
       } catch(e){}
     })();
 
-    startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START FLYING'; };
+    startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START'; };
     boostBtn.onclick=()=>{
       boost=!boost;
       boostBtn.textContent='BOOST: '+(boost?'ON x5':'OFF');
@@ -943,7 +904,7 @@ quest('screen');
     };
     cardboardBtn.onclick=async()=>{
       cardboard=!cardboard;
-      cardboardBtn.textContent='CARDBOARD: '+(cardboard?'ON':'OFF');
+      cardboardBtn.textContent='CB: '+(cardboard?'ON':'OFF');
       refreshUiVisibility();
       if (cardboard){
         if (!motion) await enablePhoneMotion(false);
@@ -957,32 +918,31 @@ quest('screen');
       }
     };
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
-    document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); document.getElementById('fullBtn').textContent='EXIT FULL SCREEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
+    document.getElementById('fullBtn').onclick=async()=>{
+      try{
+        if(!document.fullscreenElement){
+          await document.documentElement.requestFullscreen();
+          document.getElementById('fullBtn').textContent='EXIT FS';
+        } else {
+          await document.exitFullscreen();
+          document.getElementById('fullBtn').textContent='FULL SCREEN';
+        }
+      }catch(err){
+        status.classList.remove('hidden');
+        status.textContent='Fullscreen unavailable: '+err.message;
+      }
+    };
     motionBtn.onclick=async()=>{
       if(motion){
         disablePhoneMotion();
         status.classList.remove('hidden');
-        status.textContent='Phone motion disabled. Touch-drag look is active again.';
+        status.textContent='Phone motion disabled.';
         setTimeout(()=>status.classList.add('hidden'),3500);
       } else {
         await enablePhoneMotion(true);
       }
     };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-EEN'; } else { await document.exitFullscreen(); document.getElementById('fullBtn').textContent='FULL SCREEN'; } }catch(err){ status.classList.remove('hidden'); status.textContent='Fullscreen unavailable: '+err.message; } };
-    motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); status.classList.remove('hidden'); status.textContent='Phone motion disabled.'; setTimeout(()=>status.classList.add('hidden'),3500); } else { await enablePhoneMotion(true); } };
-    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-ize(innerWidth,innerHeight);});
     refreshUiVisibility();
   })();
   </script>
