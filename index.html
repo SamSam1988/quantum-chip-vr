@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v26 (Cardboard, log-depth, no strokes)</title>
+  <title>Quantum Chip Photon VR v27 (Cardboard close-up stereo, stacked HUD)</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     /* default (non-cardboard) UI */
@@ -14,8 +14,11 @@
     button.boost{background:#ff7a3d;color:#1b0a00;box-shadow:0 0 12px rgba(255,122,61,.40)}
     button.boost.active{background:#ff3d3d;color:#fff;box-shadow:0 0 16px rgba(255,61,61,.7)}
 
-    /* v22: HUD strip now also includes a live minimap of the chip */
-    #hud{position:fixed;right:8px;bottom:8px;z-index:10;background:rgba(0,0,0,.55);padding:5px 6px;border-radius:10px;display:flex;gap:6px;align-items:flex-end;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
+    /* v27: HUD restacked vertically — instrument row (map + speed + altitude) on top,
+       Qarakal logo below. Narrower footprint so it no longer overlaps the bottom-centre
+       artificial horizon in landscape. */
+    #hud{position:fixed;right:8px;bottom:8px;z-index:10;background:rgba(0,0,0,.55);padding:5px 6px;border-radius:10px;display:flex;flex-direction:column;gap:4px;align-items:center;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
+    #hud .row{display:flex;gap:6px;align-items:flex-end}
     #hud .cell{width:78px;text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif}
     #hud .lbl{font-size:7px;opacity:.78;text-transform:uppercase;letter-spacing:.07em}
     #hud .val{font-size:13px;font-weight:900;line-height:1.0;margin:1px 0}
@@ -27,7 +30,7 @@
     #hud .map-cell{width:62px}
     #hud .map-cell canvas{display:block;width:60px;height:60px;border-radius:4px;background:#101418;border:1px solid rgba(255,255,255,.18)}
     #hud .logo-cell{width:auto;display:flex;align-items:center;justify-content:center;padding:0 4px}
-    #hud .logo-cell img{height:60px;max-height:60px;width:auto;display:block;object-fit:contain}
+    #hud .logo-cell img{height:36px;max-height:36px;width:auto;display:block;object-fit:contain}
     #hud .logo-cell img.hidden{display:none}
 
     /* CARDBOARD MODE — body class toggled by JS */
@@ -147,23 +150,25 @@
   </div>
   <div id="status">Loading real GDS texture...</div>
 
-  <!-- main (non-cardboard) HUD: minimap + speed + altitude + Qarakal -->
+  <!-- v27: HUD restacked — instrument row on top, Qarakal logo below. -->
   <div id="hud">
-    <div class="cell map-cell">
-      <div class="lbl">map</div>
-      <canvas id="miniMap" width="120" height="120"></canvas>
-    </div>
-    <div class="cell">
-      <div class="lbl">speed</div>
-      <div class="val" id="speedValue">—</div>
-      <div class="unit">µm/s</div>
-      <div class="gauge"><div class="arc"></div><div id="needle" class="needle"></div></div>
-    </div>
-    <div class="cell">
-      <div class="lbl">altitude</div>
-      <div class="val" id="altValue">—</div>
-      <div class="unit">µm</div>
-      <div class="gauge"><div class="arc"></div><div id="altNeedle" class="needle altNeedle"></div></div>
+    <div class="row">
+      <div class="cell map-cell">
+        <div class="lbl">map</div>
+        <canvas id="miniMap" width="120" height="120"></canvas>
+      </div>
+      <div class="cell">
+        <div class="lbl">speed</div>
+        <div class="val" id="speedValue">—</div>
+        <div class="unit">µm/s</div>
+        <div class="gauge"><div class="arc"></div><div id="needle" class="needle"></div></div>
+      </div>
+      <div class="cell">
+        <div class="lbl">altitude</div>
+        <div class="val" id="altValue">—</div>
+        <div class="unit">µm</div>
+        <div class="gauge"><div class="arc"></div><div id="altNeedle" class="needle altNeedle"></div></div>
+      </div>
     </div>
     <div class="cell logo-cell">
       <img id="logo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.classList.add('hidden')" />
@@ -287,9 +292,15 @@
     // is actually looking at, and the IPD is small. Result: zero disparity on the object of
     // interest at any altitude, clean stereo fusion.
     const IPD_UM = 70;
-    const CONV_MIN_UNIT = 0.5;   // 500 µm
-    const CONV_MAX_UNIT = 12.0;  // 12 mm
+    // v27: allow convergence as close as 20 µm — without this, focusing on a feature
+    // a few microns away was clamped to 500 µm convergence and the brain couldn't fuse.
+    const CONV_MIN_UNIT = 0.02;
+    const CONV_MAX_UNIT = 12.0;
     const CONV_DEFAULT_UNIT = 3.0;
+    // v27: cap the per-eye angular disparity so close-up never exceeds what the eye can
+    // converge. 1.5° = 0.026 rad. Effective eye-separation shrinks proportionally when the
+    // photon is close to its target — same trick a microscope user's brain does.
+    const MAX_DISPARITY_RAD = 0.026;
 
     const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0c1622);
     // v26: near plane pushed from 0.5 µm out to 10 µm. The old 0.0005 covered a
@@ -667,7 +678,6 @@
       // camera-right (purely horizontal) and current look vector
       const rx = Math.cos(yaw), ry = -Math.sin(yaw);
       const f = lookDirection();
-      const eyeSep = (IPD_UM / UM_PER_UNIT) / 2;
       const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
 
       // Convergence distance: prefer where the look ray hits the chip top surface (z=0).
@@ -678,6 +688,11 @@
         if (tHit > 0) convDist = tHit;
       }
       convDist = Math.max(CONV_MIN_UNIT, Math.min(CONV_MAX_UNIT, convDist));
+      // v27: shrink eye-separation when the target is close, so angular disparity stays
+      // within the comfortable fusion range. ipd_max = 2 * convDist * tan(MAX_DISPARITY/2).
+      const ipdMaxUnit = 2 * convDist * Math.tan(MAX_DISPARITY_RAD/2);
+      const fullIpdUnit = IPD_UM / UM_PER_UNIT;
+      const eyeSep = Math.min(fullIpdUnit, ipdMaxUnit) / 2;
       const target = new THREE.Vector3(px + f.x*convDist, py + f.y*convDist, pz + f.z*convDist);
 
       renderer.setScissorTest(true);
@@ -1005,6 +1020,40 @@ alse);
       } else {
         if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
         try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+      }
+    };
+    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
+    document.getElementById('fullBtn').onclick=async()=>{
+      try{
+        if(!document.fullscreenElement){
+          await document.documentElement.requestFullscreen();
+          document.getElementById('fullBtn').textContent='EXIT FS';
+        } else {
+          await document.exitFullscreen();
+          document.getElementById('fullBtn').textContent='FULL SCREEN';
+        }
+      }catch(err){
+        status.classList.remove('hidden');
+        status.textContent='Fullscreen unavailable: '+err.message;
+      }
+    };
+    motionBtn.onclick=async()=>{
+      if(motion){
+        disablePhoneMotion();
+        status.classList.remove('hidden');
+        status.textContent='Phone motion disabled.';
+        setTimeout(()=>status.classList.add('hidden'),3500);
+      } else {
+        await enablePhoneMotion(true);
+      }
+    };
+    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
+; } catch(e){}
       }
     };
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
