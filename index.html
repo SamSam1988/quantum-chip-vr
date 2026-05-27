@@ -642,7 +642,7 @@
         const d3 = Math.sqrt(dxy*dxy + state.z*state.z);
         if (d3 < minD) minD = d3;
       }
-      const RANGE = 600; // v28: vibration starts twice as far from the SQUIDs
+      const RANGE = 800; // v30
       if (minD > RANGE) return;
       const f = 1 - (minD / RANGE);
       const interval = 420 - 365 * f;
@@ -697,7 +697,7 @@
     // eyeSep is in world units (1 unit = 1 mm here). 0.06 ≈ 60 mm — a touch under real
     // human IPD, which gives the chip a strong but comfortable depth feel.
     const stereoCam = new THREE.StereoCamera();
-    stereoCam.eyeSep = 0.06;
+    stereoCam.eyeSep = 0.00007; // 70 µm — matches photon scale (viewing_dist/30 rule)
     function renderStereo(){
       const halfW = innerWidth/2, h = innerHeight;
       camera.aspect = halfW/h;
@@ -1002,4 +1002,6 @@
   })();
   </script>
 </body>
+</html>
+body>
 </html>
