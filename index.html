@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Quantum Chip Photon VR v28 (raycast vergence)</title>
+  <title>Quantum Chip Photon VR v29 (off-axis StereoCamera, real VR)</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     /* default (non-cardboard) UI */
@@ -690,59 +690,38 @@
       return smoothConvDist;
     }
 
+    // v29: PROPER VR — Three.js StereoCamera = parallel eyes + off-axis (asymmetric)
+    // projection matrices. This is what every SBS Cardboard video and every real VR
+    // engine uses. The old toe-in rotation introduced vertical disparity at the edges
+    // that the brain CAN'T fuse (that's what you were seeing as "two unaligned images").
+    // eyeSep is in world units (1 unit = 1 mm here). 0.06 ≈ 60 mm — a touch under real
+    // human IPD, which gives the chip a strong but comfortable depth feel.
+    const stereoCam = new THREE.StereoCamera();
+    stereoCam.eyeSep = 0.06;
     function renderStereo(){
-      // v23: TOE-IN stereo. Each eye is offset along the camera-right vector by ±IPD/2,
-      // and BOTH eyes look at a common convergence point along the photon's gaze. The
-      // convergence point is the chip surface under the gaze when looking down, else a
-      // default mid distance. Result: the object you're focused on has zero pixel disparity
-      // (single, sharp), and only objects in front of / behind that depth have parallax.
-      // This is the standard fix for the "two of everything when far" problem.
       const halfW = innerWidth/2, h = innerHeight;
       camera.aspect = halfW/h;
-      const prevFov = camera.fov;
+      const prevFov = camera.fov, prevFocus = camera.focus;
       camera.fov = 88;
+      // camera.focus = the depth at which the screen plane sits. StereoCamera uses this
+      // to build the off-axis projection so objects at this depth have ZERO disparity.
+      camera.focus = probeConvergence();
       camera.updateProjectionMatrix();
-      // v25: do NOT change pixel ratio mid-frame — setPixelRatio also resizes the
-      // framebuffer, which mid-render can blank out the canvas (this is what made the
-      // chip disappear when entering cardboard in v24). The global ratio cap of 1.75
-      // set at startup is already conservative.
 
-      // camera-right (purely horizontal) and current look vector
-      const rx = Math.cos(yaw), ry = -Math.sin(yaw);
-      const f = lookDirection();
-      const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
-
-      // v28: convergence comes from the raycast depth probe — always points at whatever
-      // the photon is actually staring at, at the actual distance to that thing.
-      const convDist = probeConvergence();
-      // v27: shrink eye-separation when the target is close, so angular disparity stays
-      // within the comfortable fusion range. ipd_max = 2 * convDist * tan(MAX_DISPARITY/2).
-      const ipdMaxUnit = 2 * convDist * Math.tan(MAX_DISPARITY_RAD/2);
-      const fullIpdUnit = IPD_UM / UM_PER_UNIT;
-      const eyeSep = Math.min(fullIpdUnit, ipdMaxUnit) / 2;
-      const target = new THREE.Vector3(px + f.x*convDist, py + f.y*convDist, pz + f.z*convDist);
+      stereoCam.update(camera);
 
       renderer.setScissorTest(true);
-
-      // LEFT eye: shift left along camera-right, then aim at the convergence point
-      camera.position.set(px - rx*eyeSep, py - ry*eyeSep, pz);
-      camera.lookAt(target);
       renderer.setViewport(0, 0, halfW, h);
       renderer.setScissor (0, 0, halfW, h);
-      renderer.render(scene, camera);
+      renderer.render(scene, stereoCam.cameraL);
 
-      // RIGHT eye: shift right, aim at the same point
-      camera.position.set(px + rx*eyeSep, py + ry*eyeSep, pz);
-      camera.lookAt(target);
       renderer.setViewport(halfW, 0, halfW, h);
       renderer.setScissor (halfW, 0, halfW, h);
-      renderer.render(scene, camera);
-
-      // restore camera (position + orientation)
-      camera.position.set(px, py, pz);
-      camera.lookAt(px + f.x, py + f.y, pz + f.z);
+      renderer.render(scene, stereoCam.cameraR);
       renderer.setScissorTest(false);
+
       camera.fov = prevFov;
+      camera.focus = prevFocus;
     }
 
     function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
@@ -988,138 +967,6 @@
         try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
         await lockLandscape();
         await requestWakeLock();
-      } else {
-        if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
-        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
-      }
-    };
-    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
-    document.getElementById('fullBtn').onclick=async()=>{
-      try{
-        if(!document.fullscreenElement){
-          await document.documentElement.requestFullscreen();
-          document.getElementById('fullBtn').textContent='EXIT FS';
-        } else {
-          await document.exitFullscreen();
-          document.getElementById('fullBtn').textContent='FULL SCREEN';
-        }
-      }catch(err){
-        status.classList.remove('hidden');
-        status.textContent='Fullscreen unavailable: '+err.message;
-      }
-    };
-    motionBtn.onclick=async()=>{
-      if(motion){
-        disablePhoneMotion();
-        status.classList.remove('hidden');
-        status.textContent='Phone motion disabled.';
-        setTimeout(()=>status.classList.add('hidden'),3500);
-      } else {
-        await enablePhoneMotion(true);
-      }
-    };
-    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-ion){
-        disablePhoneMotion();
-        status.classList.remove('hidden');
-        status.textContent='Phone motion disabled.';
-        setTimeout(()=>status.classList.add('hidden'),3500);
-      } else {
-        await enablePhoneMotion(true);
-      }
-    };
-    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-alse);
-        if (!running){ running = true; startBtn.textContent = 'PAUSE'; }
-        try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
-        await lockLandscape();
-        await requestWakeLock();
-      } else {
-        if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
-        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
-      }
-    };
-    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
-    document.getElementById('fullBtn').onclick=async()=>{
-      try{
-        if(!document.fullscreenElement){
-          await document.documentElement.requestFullscreen();
-          document.getElementById('fullBtn').textContent='EXIT FS';
-        } else {
-          await document.exitFullscreen();
-          document.getElementById('fullBtn').textContent='FULL SCREEN';
-        }
-      }catch(err){
-        status.classList.remove('hidden');
-        status.textContent='Fullscreen unavailable: '+err.message;
-      }
-    };
-    motionBtn.onclick=async()=>{
-      if(motion){
-        disablePhoneMotion();
-        status.classList.remove('hidden');
-        status.textContent='Phone motion disabled.';
-        setTimeout(()=>status.classList.add('hidden'),3500);
-      } else {
-        await enablePhoneMotion(true);
-      }
-    };
-    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-; } catch(e){}
-      }
-    };
-    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
-    document.getElementById('fullBtn').onclick=async()=>{
-      try{
-        if(!document.fullscreenElement){
-          await document.documentElement.requestFullscreen();
-          document.getElementById('fullBtn').textContent='EXIT FS';
-        } else {
-          await document.exitFullscreen();
-          document.getElementById('fullBtn').textContent='FULL SCREEN';
-        }
-      }catch(err){
-        status.classList.remove('hidden');
-        status.textContent='Fullscreen unavailable: '+err.message;
-      }
-    };
-    motionBtn.onclick=async()=>{
-      if(motion){
-        disablePhoneMotion();
-        status.classList.remove('hidden');
-        status.textContent='Phone motion disabled.';
-        setTimeout(()=>status.classList.add('hidden'),3500);
-      } else {
-        await enablePhoneMotion(true);
-      }
-    };
-    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-shUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-;
       } else {
         if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
         try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
