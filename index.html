@@ -6,9 +6,9 @@
   <title>Quantum Chip Photon VR v29 (off-axis StereoCamera, real VR)</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
-    /* v33: ordinary view — buttons stacked RIGHT, above the dashboard, ~50% size */
-    #ui{position:fixed;right:8px;bottom:170px;z-index:10;display:flex;flex-direction:column;gap:3px;max-width:none;align-items:flex-end}
-    button{border:0;border-radius:5px;padding:4px 6px;font-weight:800;font-size:7px;background:#59ffc0;color:#02110c;box-shadow:0 0 7px rgba(89,255,192,.25);cursor:pointer}
+    /* v34: ordinary view — buttons stacked RIGHT, just above dashboard, 30% larger */
+    #ui{position:fixed;right:8px;bottom:120px;z-index:10;display:flex;flex-direction:column;gap:3px;max-width:none;align-items:flex-end}
+    button{border:0;border-radius:5px;padding:5px 8px;font-weight:800;font-size:9px;background:#59ffc0;color:#02110c;box-shadow:0 0 7px rgba(89,255,192,.25);cursor:pointer}
     button.secondary{background:#ffe16b;color:#100d00}
     button.dark{background:#dde8ff;color:#06101f}
     button.boost{background:#ff7a3d;color:#1b0a00;box-shadow:0 0 12px rgba(255,122,61,.40)}
@@ -19,18 +19,18 @@
        artificial horizon in landscape. */
     #hud{position:fixed;right:8px;bottom:1px;z-index:10;background:rgba(0,0,0,.55);padding:3px 6px;border-radius:10px;display:flex;flex-direction:column;gap:2px;align-items:center;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
     #hud .row{display:flex;gap:6px;align-items:flex-end}
-    #hud .cell{width:78px;text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif}
-    #hud .lbl{font-size:7px;opacity:.78;text-transform:uppercase;letter-spacing:.07em}
-    #hud .val{font-size:13px;font-weight:900;line-height:1.0;margin:1px 0}
-    #hud .unit{font-size:7px;opacity:.78}
-    #hud .gauge{position:relative;width:64px;height:18px;margin:2px auto 0;overflow:hidden}
-    #hud .arc{position:absolute;left:6px;top:2px;width:52px;height:26px;border:2px solid rgba(221,232,255,.28);border-bottom:0;border-radius:52px 52px 0 0}
-    #hud .needle{position:absolute;left:31px;bottom:0;width:2px;height:16px;background:#59ffc0;border-radius:3px;transform-origin:50% 100%;transform:rotate(-82deg);box-shadow:0 0 6px rgba(89,255,192,.7)}
+    #hud .cell{width:62px;text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif}
+    #hud .lbl{font-size:6px;opacity:.78;text-transform:uppercase;letter-spacing:.07em}
+    #hud .val{font-size:11px;font-weight:900;line-height:1.0;margin:1px 0}
+    #hud .unit{font-size:6px;opacity:.78}
+    #hud .gauge{position:relative;width:50px;height:14px;margin:2px auto 0;overflow:hidden}
+    #hud .arc{position:absolute;left:5px;top:2px;width:40px;height:20px;border:2px solid rgba(221,232,255,.28);border-bottom:0;border-radius:40px 40px 0 0}
+    #hud .needle{position:absolute;left:24px;bottom:0;width:2px;height:12px;background:#59ffc0;border-radius:3px;transform-origin:50% 100%;transform:rotate(-82deg);box-shadow:0 0 6px rgba(89,255,192,.7)}
     #hud .altNeedle{background:#ffd166;box-shadow:0 0 6px rgba(255,209,102,.7)}
-    #hud .map-cell{width:62px}
-    #hud .map-cell canvas{display:block;width:60px;height:60px;border-radius:4px;background:#101418;border:1px solid rgba(255,255,255,.18)}
+    #hud .map-cell{width:50px}
+    #hud .map-cell canvas{display:block;width:48px;height:48px;border-radius:4px;background:#101418;border:1px solid rgba(255,255,255,.18)}
     #hud .logo-cell{width:auto;display:flex;align-items:center;justify-content:center;padding:0 4px}
-    #hud .logo-cell img{height:36px;max-height:36px;width:auto;display:block;object-fit:contain}
+    #hud .logo-cell img{height:28px;max-height:28px;width:auto;display:block;object-fit:contain}
     #hud .logo-cell img.hidden{display:none}
 
     /* CARDBOARD MODE — body class toggled by JS */
@@ -153,7 +153,7 @@
   <div id="status">Loading real GDS texture...</div>
   <!-- v32: live calibration panel (top-centre, semi-transparent, visible in both modes) -->
   <div id="calib" style="position:fixed;top:4px;left:50%;transform:translateX(-50%);z-index:12;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:8px;color:#fff;font:11px system-ui,sans-serif;display:none;gap:10px;align-items:center;border:1px solid rgba(255,255,255,.15)">
-    <label>eyeSep <input id="cIPD" type="range" min="0.00001" max="0.05" step="0.00001" value="0.00007" style="width:90px;vertical-align:middle"/> <span id="cIPDv">70µm</span></label>
+    <label>eyeSep <input id="cIPD" type="range" min="-0.001" max="0.05" step="0.000001" value="0.00007" style="width:110px;vertical-align:middle"/> <span id="cIPDv">70µm</span></label>
     <label>focus <input id="cFOC" type="range" min="0.05" max="10" step="0.05" value="2" style="width:80px;vertical-align:middle"/> <span id="cFOCv">2.0</span></label>
     <label>FOV <input id="cFOV" type="range" min="40" max="120" step="1" value="78" style="width:70px;vertical-align:middle"/> <span id="cFOVv">78°</span></label>
     <label><input id="cMan" type="checkbox"/> manual focus</label>
@@ -706,8 +706,9 @@
             ipdv=document.getElementById('cIPDv'), focv=document.getElementById('cFOCv'),
             fovv=document.getElementById('cFOVv');
       function syncLabels(){
-        const um = (calib.eyeSep*1000000).toFixed(0);
-        ipdv.textContent = (um>=1000)?(um/1000).toFixed(2)+'mm':um+'µm';
+        const umNum = calib.eyeSep*1000000;
+        const um = umNum.toFixed(1);
+        ipdv.textContent = (Math.abs(umNum)>=1000)?(umNum/1000).toFixed(2)+'mm':um+'µm';
         focv.textContent = calib.focus.toFixed(2);
         fovv.textContent = calib.fov+'°';
       }
@@ -1004,6 +1005,11 @@
 enablePhoneMotion(true); } };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
     refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
+bility();
   })();
   </script>
 </body>
