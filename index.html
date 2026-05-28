@@ -667,25 +667,16 @@
     stereoRaycaster.far = CONV_MAX_UNIT + 1;
     let smoothConvDist = CONV_DEFAULT_UNIT;
     function probeConvergence(){
+      // v30: cheap plane intercept only — raycasting the full GDS every frame was
+      // crashing the phone. Convergence = where the look ray hits the chip top (z=0),
+      // clamped, smoothed.
       const dir = lookDirection();
-      stereoRaycaster.set(camera.position, dir);
-      const targets = [];
-      if (nbMesh) targets.push(nbMesh);
-      if (detailGroup) targets.push(detailGroup);
-      if (base) targets.push(base);
-      let raw = null;
-      try {
-        const hits = stereoRaycaster.intersectObjects(targets, true);
-        if (hits.length) raw = hits[0].distance;
-      } catch(e){}
-      // Fallback: ray-plane intercept with the chip top surface (z=0)
-      if (raw === null && dir.z < -0.03){
+      let raw = CONV_DEFAULT_UNIT;
+      if (dir.z < -0.03){
         const tHit = -camera.position.z / dir.z;
         if (tHit > 0) raw = tHit;
       }
-      if (raw === null) raw = CONV_DEFAULT_UNIT;
       raw = Math.max(CONV_MIN_UNIT, Math.min(CONV_MAX_UNIT, raw));
-      // Low-pass — ~6 frames to settle, prevents disparity jitter at edges
       smoothConvDist += (raw - smoothConvDist) * 0.18;
       return smoothConvDist;
     }
@@ -1002,6 +993,4 @@
   })();
   </script>
 </body>
-</html>
-body>
 </html>
