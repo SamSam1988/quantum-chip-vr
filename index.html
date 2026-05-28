@@ -6,9 +6,9 @@
   <title>Quantum Chip Photon VR v29 (off-axis StereoCamera, real VR)</title>
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
-    /* default (non-cardboard) UI */
-    #ui{position:fixed;left:8px;top:8px;z-index:10;display:flex;gap:5px;flex-wrap:wrap;max-width:92vw}
-    button{border:0;border-radius:8px;padding:8px 10px;font-weight:800;font-size:10px;background:#59ffc0;color:#02110c;box-shadow:0 0 12px rgba(89,255,192,.30);cursor:pointer}
+    /* v32: default (non-cardboard) UI — buttons stacked LEFT vertically, 75% size */
+    #ui{position:fixed;left:6px;top:50%;transform:translateY(-50%);z-index:10;display:flex;flex-direction:column;gap:4px;max-width:none}
+    button{border:0;border-radius:6px;padding:6px 8px;font-weight:800;font-size:8px;background:#59ffc0;color:#02110c;box-shadow:0 0 9px rgba(89,255,192,.30);cursor:pointer}
     button.secondary{background:#ffe16b;color:#100d00}
     button.dark{background:#dde8ff;color:#06101f}
     button.boost{background:#ff7a3d;color:#1b0a00;box-shadow:0 0 12px rgba(255,122,61,.40)}
@@ -149,6 +149,13 @@
     <button class="dark" id="fullBtn">FULL SCREEN</button>
   </div>
   <div id="status">Loading real GDS texture...</div>
+  <!-- v32: live calibration panel (top-centre, semi-transparent, visible in both modes) -->
+  <div id="calib" style="position:fixed;top:4px;left:50%;transform:translateX(-50%);z-index:12;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:8px;color:#fff;font:11px system-ui,sans-serif;display:flex;gap:10px;align-items:center;border:1px solid rgba(255,255,255,.15)">
+    <label>eyeSep <input id="cIPD" type="range" min="0.00001" max="0.05" step="0.00001" value="0.00007" style="width:90px;vertical-align:middle"/> <span id="cIPDv">70µm</span></label>
+    <label>focus <input id="cFOC" type="range" min="0.05" max="10" step="0.05" value="2" style="width:80px;vertical-align:middle"/> <span id="cFOCv">2.0</span></label>
+    <label>FOV <input id="cFOV" type="range" min="40" max="120" step="1" value="78" style="width:70px;vertical-align:middle"/> <span id="cFOVv">78°</span></label>
+    <label><input id="cMan" type="checkbox"/> manual focus</label>
+  </div>
 
   <!-- v27: HUD restacked — instrument row on top, Qarakal logo below. -->
   <div id="hud">
@@ -688,17 +695,34 @@
     // eyeSep is in world units (1 unit = 1 mm here). 0.06 ≈ 60 mm — a touch under real
     // human IPD, which gives the chip a strong but comfortable depth feel.
     const stereoCam = new THREE.StereoCamera();
-    stereoCam.eyeSep = 0.00007; // 70 µm — matches photon scale (viewing_dist/30 rule)
+    stereoCam.eyeSep = 0.00007;
+    // v32: live calibration knobs — eyeSep / focus / FOV / manualFocus
+    const calib = { eyeSep:0.00007, focus:2.0, fov:78, manualFocus:false };
+    (function bindCalib(){
+      const ipd=document.getElementById('cIPD'), foc=document.getElementById('cFOC'),
+            fov=document.getElementById('cFOV'), man=document.getElementById('cMan'),
+            ipdv=document.getElementById('cIPDv'), focv=document.getElementById('cFOCv'),
+            fovv=document.getElementById('cFOVv');
+      function syncLabels(){
+        const um = (calib.eyeSep*1000000).toFixed(0);
+        ipdv.textContent = (um>=1000)?(um/1000).toFixed(2)+'mm':um+'µm';
+        focv.textContent = calib.focus.toFixed(2);
+        fovv.textContent = calib.fov+'°';
+      }
+      ipd.oninput=()=>{calib.eyeSep=+ipd.value; stereoCam.eyeSep=calib.eyeSep; syncLabels();};
+      foc.oninput=()=>{calib.focus=+foc.value; syncLabels();};
+      fov.oninput=()=>{calib.fov=+fov.value; syncLabels();};
+      man.onchange=()=>{calib.manualFocus=man.checked;};
+      syncLabels();
+    })();
     function renderStereo(){
       const halfW = innerWidth/2, h = innerHeight;
       // v31: pass FULL aspect — StereoCamera applies its own 0.5x for the half viewport.
       // Halving here too was the actual cause of the "double" outside close-up.
       camera.aspect = innerWidth/h;
       const prevFov = camera.fov, prevFocus = camera.focus;
-      camera.fov = 78;
-      // camera.focus = the depth at which the screen plane sits. StereoCamera uses this
-      // to build the off-axis projection so objects at this depth have ZERO disparity.
-      camera.focus = probeConvergence();
+      camera.fov = calib.fov;
+      camera.focus = calib.manualFocus ? calib.focus : probeConvergence();
       camera.updateProjectionMatrix();
 
       stereoCam.update(camera);
@@ -966,39 +990,8 @@
       }
     };
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
-    document.getElementById('fullBtn').onclick=async()=>{
-      try{
-        if(!document.fullscreenElement){
-          await document.documentElement.requestFullscreen();
-          document.getElementById('fullBtn').textContent='EXIT FS';
-        } else {
-          await document.exitFullscreen();
-          document.getElementById('fullBtn').textContent='FULL SCREEN';
-        }
-      }catch(err){
-        status.classList.remove('hidden');
-        status.textContent='Fullscreen unavailable: '+err.message;
-      }
-    };
-    motionBtn.onclick=async()=>{
-      if(motion){
-        disablePhoneMotion();
-        status.classList.remove('hidden');
-        status.textContent='Phone motion disabled.';
-        setTimeout(()=>status.classList.add('hidden'),3500);
-      } else {
-        await enablePhoneMotion(true);
-      }
-    };
-    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-ePhoneMotion(true);
-      }
-    };
+    document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
+    motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); } else { await enablePhoneMotion(true); } };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
     refreshUiVisibility();
   })();
