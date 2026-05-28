@@ -17,7 +17,7 @@
     /* v27: HUD restacked vertically — instrument row (map + speed + altitude) on top,
        Qarakal logo below. Narrower footprint so it no longer overlaps the bottom-centre
        artificial horizon in landscape. */
-    #hud{position:fixed;right:8px;bottom:8px;z-index:10;background:rgba(0,0,0,.55);padding:5px 6px;border-radius:10px;display:flex;flex-direction:column;gap:4px;align-items:center;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
+    #hud{position:fixed;right:8px;bottom:1px;z-index:10;background:rgba(0,0,0,.55);padding:3px 6px;border-radius:10px;display:flex;flex-direction:column;gap:2px;align-items:center;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
     #hud .row{display:flex;gap:6px;align-items:flex-end}
     #hud .cell{width:78px;text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif}
     #hud .lbl{font-size:7px;opacity:.78;text-transform:uppercase;letter-spacing:.07em}
@@ -691,9 +691,11 @@
     stereoCam.eyeSep = 0.00007; // 70 µm — matches photon scale (viewing_dist/30 rule)
     function renderStereo(){
       const halfW = innerWidth/2, h = innerHeight;
-      camera.aspect = halfW/h;
+      // v31: pass FULL aspect — StereoCamera applies its own 0.5x for the half viewport.
+      // Halving here too was the actual cause of the "double" outside close-up.
+      camera.aspect = innerWidth/h;
       const prevFov = camera.fov, prevFocus = camera.focus;
-      camera.fov = 88;
+      camera.fov = 78;
       // camera.focus = the depth at which the screen plane sits. StereoCamera uses this
       // to build the off-axis projection so objects at this depth have ZERO disparity.
       camera.focus = probeConvergence();
@@ -986,6 +988,15 @@
         setTimeout(()=>status.classList.add('hidden'),3500);
       } else {
         await enablePhoneMotion(true);
+      }
+    };
+    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
+ePhoneMotion(true);
       }
     };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
