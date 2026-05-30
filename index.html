@@ -36,104 +36,21 @@
     #hud .logo-cell img{height:28px;max-height:28px;width:auto;display:block;object-fit:contain}
     #hud .logo-cell img.hidden{display:none}
 
-    /* CARDBOARD MODE — body class toggled by JS */
-    body.cardboard #hud{display:none !important}
-    /* v24: Buttons are pushed hard against the LEFT screen edge and made tiny, so the
-       cardboard lenses (which crop ~10–15% from each edge) won't show them. Only visible
-       when you pop the phone out of the headset to tap them. */
-    body.cardboard #ui{
-      display:flex; flex-direction:column; gap:2px;
-      left:0; top:50%; transform:translateY(-50%);
-      max-width:none;
-    }
-    body.cardboard #ui button{
-      font-size:8px; padding:3px 5px;
-      box-shadow:none; opacity:.75;
-      min-width:55px; border-radius:3px;
-      letter-spacing:0;
-    }
-    body.cardboard #motionBtn{display:none}
-    body.cardboard #fullBtn{display:none}
-    body.cardboard #boostBtn{display:none}      /* v33: no boost in 3D view */
-    body.cardboard #status{display:none}
-    /* v23: single centered reticle hidden in cardboard — we use per-eye ADIs instead */
-    body.cardboard #center{display:none}
-
-    /* cardboard HUDs — one in each eye half. Positioned so they live in the
-       lens-visible inner upper area of each half (not all the way at the screen edge). */
-    .cb-hud{
-      display:none; position:fixed; z-index:11; pointer-events:none;
-      background:rgba(0,0,0,.50); border:1px solid rgba(255,255,255,.14);
-      border-radius:8px; padding:3px 5px;
-      box-shadow:0 0 10px rgba(89,255,192,.15);
-      gap:5px; align-items:center;
-      font-family:system-ui,-apple-system,sans-serif;
-    }
-    body.cardboard .cb-hud{display:flex}
-    /* v26: dashboard for ONE eye only — same eye as the ADI. */
-    body.cardboard #cb-hud-right{display:none}
-    .cb-hud .cell{text-align:center;color:#fff;min-width:30px}
-    .cb-hud .lbl{font-size:6px;opacity:.78;text-transform:uppercase;letter-spacing:.06em;line-height:1}
-    .cb-hud .val{font-size:10px;font-weight:900;line-height:1;margin:1px 0}
-    .cb-hud .unit{font-size:6px;opacity:.78;line-height:1}
-    .cb-hud canvas{display:block;width:38px;height:38px;border-radius:3px;background:#101418;border:1px solid rgba(255,255,255,.16)}
-    .cb-hud img{height:32px;max-height:32px;width:auto;display:block;object-fit:contain}
-    /* v24: cardboard HUD now only holds the minimap + Qarakal logo (speed and altitude
-       have moved next to the ADI). One per eye half, near the top edge so it doesn't
-       compete with the ADI for attention. */
-    #cb-hud-left  { top:5vh; left:25vw; transform:translateX(-50%); }
-    #cb-hud-right { top:5vh; left:75vw; transform:translateX(-50%); }
-
-    /* v24: per-eye Attitude Director Indicator (ADI). Centered horizontally inside each
-       eye half AND vertically — so the brain fuses the two copies into a single ADI that
-       appears perfectly centered in the user's visual field. A compact speed/alt readout
-       sits directly above it. */
-    .cb-adi{
-      display:none; position:fixed; z-index:11; pointer-events:none;
-      width:118px;
-      filter:drop-shadow(0 0 4px rgba(0,0,0,.6));
-      text-align:center;
-      font-family:system-ui,-apple-system,sans-serif;
-    }
-    body.cardboard .cb-adi{display:block}
-    /* v25: only show ONE ADI (left eye). The other is fully hidden — no rivalry, just
-       one instrument floating in one eye. */
-    body.cardboard #cb-adi-right{display:none}
-    .cb-adi .adi-svg{display:block;width:118px;height:118px;overflow:hidden}
-    .cb-adi svg{display:block;width:100%;height:100%;overflow:hidden}
-    /* compact dense readout sitting right above the ADI */
-    .cb-adi .adi-readout{
-      color:#fff; font-size:11px; font-weight:800;
-      margin-bottom:3px; letter-spacing:.02em;
-      text-shadow:0 0 4px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.85);
-    }
-    .cb-adi .adi-readout .sep{opacity:.6; margin:0 4px}
-    .cb-adi .adi-readout .u{font-size:8px; opacity:.78; margin-left:1px}
-    /* horizontally centred in each eye half, vertically centred in the screen */
-    #cb-adi-left  { top:50vh; left:25vw; transform:translate(-50%,-50%); }
-    #cb-adi-right { top:50vh; left:75vw; transform:translate(-50%,-50%); }
-
-    /* v23: rotate-phone prompt — covers the screen if the user is in portrait. */
-    #rotateOverlay{
-      display:none; position:fixed; inset:0; z-index:1000;
-      background:rgba(8,18,30,0.95); color:#fff;
-      align-items:center; justify-content:center;
-      flex-direction:column; gap:14px;
-      font-family:system-ui,-apple-system,sans-serif; text-align:center; padding:24px;
-    }
-    @media (orientation: portrait) and (max-width: 900px){
-      #rotateOverlay{display:flex}
-    }
-    #rotateOverlay .icon{
-      width:64px; height:64px; border:3px solid #59ffc0; border-radius:10px;
-      animation: rotPrompt 1.8s ease-in-out infinite;
-      box-shadow:0 0 16px rgba(89,255,192,.45);
-    }
-    @keyframes rotPrompt {
-      0%   { transform: rotate(0deg)   scale(1,1.5); }
-      50%  { transform: rotate(90deg)  scale(1,1.5); }
-      100% { transform: rotate(90deg)  scale(1,1.5); }
-    }
+    /* v37: Game Mode UI */
+    button#gameBtn{font-size:13px;padding:7px 12px;background:#ff3a8a;color:#fff;box-shadow:0 0 14px rgba(255,58,138,.55);font-weight:900;letter-spacing:.04em}
+    button#gameBtn.active{background:#ffd166;color:#111}
+    #gameMsg{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:50;background:rgba(0,0,0,.85);color:#fff;padding:20px 26px;border-radius:14px;border:2px solid #ff3a8a;max-width:80%;font:14px/1.4 system-ui,sans-serif;display:none;text-align:center;box-shadow:0 0 30px rgba(255,58,138,.5)}
+    #gameMsg h2{margin:0 0 8px;font-size:18px;color:#ff7ab3}
+    #gameMsg button{margin-top:14px;background:#59ffc0;color:#02110c;border:0;border-radius:6px;padding:8px 14px;font-weight:800;font-size:13px;cursor:pointer}
+    /* Bloch sphere panel — left side, used in game mode only */
+    #bloch{position:fixed;left:8px;top:50%;transform:translateY(-50%);z-index:10;background:rgba(0,0,0,.60);padding:8px;border-radius:10px;border:1px solid rgba(255,58,138,.4);display:none;font:11px system-ui,sans-serif;color:#fff;text-align:center}
+    #bloch.on{display:block}
+    #bloch svg{display:block;width:140px;height:140px}
+    #bloch .dirac{margin-top:5px;font-size:11px;font-family:'Cambria Math','Latin Modern Math',serif;white-space:nowrap}
+    #bloch .vc{margin-top:2px;font-size:9px;opacity:.7}
+    #bloch .lbl{font-size:9px;opacity:.7;margin-bottom:3px}
+    #vortexCount{position:fixed;left:8px;top:8px;z-index:10;background:rgba(0,0,0,.6);padding:5px 9px;border-radius:8px;color:#fff;font:bold 12px system-ui,sans-serif;display:none}
+    #vortexCount.on{display:block}
 
     #status{position:fixed;right:8px;top:8px;z-index:10;background:rgba(0,0,0,.62);padding:8px 10px;border-radius:8px;font-size:11px;transition:opacity .7s ease}
     #status.hidden{opacity:0;pointer-events:none}
