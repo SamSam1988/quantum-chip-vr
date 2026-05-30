@@ -150,7 +150,6 @@
       <button class="boost" id="boostBtn">BOOST: OFF</button>
     </div>
     <div class="ui-row">
-      <button class="dark" id="calibBtn">CALIB</button>
       <button class="dark" id="cardboardBtn">3D: OFF</button>
     </div>
     <div class="ui-row">
@@ -160,13 +159,6 @@
     <button class="secondary" id="motionBtn">ENABLE PHONE MOTION</button>
   </div>
   <div id="status">Loading real GDS texture...</div>
-  <!-- v32: live calibration panel (top-centre, semi-transparent, visible in both modes) -->
-  <div id="calib" style="position:fixed;top:4px;left:50%;transform:translateX(-50%);z-index:12;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:8px;color:#fff;font:11px system-ui,sans-serif;display:none;gap:10px;align-items:center;border:1px solid rgba(255,255,255,.15)">
-    <label>eyeSep <input id="cIPD" type="range" min="-20" max="20" step="0.001" value="0.07" style="width:130px;vertical-align:middle"/> <span id="cIPDv">70µm</span></label>
-    <label>focus <input id="cFOC" type="range" min="0.05" max="10" step="0.05" value="2" style="width:80px;vertical-align:middle"/> <span id="cFOCv">2.0</span></label>
-    <label>FOV <input id="cFOV" type="range" min="5" max="120" step="1" value="78" style="width:70px;vertical-align:middle"/> <span id="cFOVv">78°</span></label>
-    <label><input id="cMan" type="checkbox"/> manual focus</label>
-  </div>
 
   <!-- v27: HUD restacked — instrument row on top, Qarakal logo below. -->
   <div id="hud">
@@ -706,35 +698,23 @@
     // eyeSep is in world units (1 unit = 1 mm here). 0.06 ≈ 60 mm — a touch under real
     // human IPD, which gives the chip a strong but comfortable depth feel.
     const stereoCam = new THREE.StereoCamera();
-    stereoCam.eyeSep = 0.07;
-    // v35: calib.eyeSep is now in mm (world units = mm too), range ±70 mm
-    const calib = { eyeSep:0.07, focus:2.0, fov:78, manualFocus:false };
-    (function bindCalib(){
-      const ipd=document.getElementById('cIPD'), foc=document.getElementById('cFOC'),
-            fov=document.getElementById('cFOV'), man=document.getElementById('cMan'),
-            ipdv=document.getElementById('cIPDv'), focv=document.getElementById('cFOCv'),
-            fovv=document.getElementById('cFOVv');
-      function syncLabels(){
-        // slider value is mm; world unit = 1mm too, so eyeSep stored = slider value
-        const mm = calib.eyeSep;
-        ipdv.textContent = (Math.abs(mm)>=1)?mm.toFixed(2)+'mm':(mm*1000).toFixed(0)+'µm';
-        focv.textContent = calib.focus.toFixed(2);
-        fovv.textContent = calib.fov+'°';
-      }
-      ipd.oninput=()=>{calib.eyeSep=+ipd.value; stereoCam.eyeSep=calib.eyeSep; syncLabels();};
-      foc.oninput=()=>{calib.focus=+foc.value; syncLabels();};
-      fov.oninput=()=>{calib.fov=+fov.value; syncLabels();};
-      man.onchange=()=>{calib.manualFocus=man.checked;};
-      syncLabels();
-    })();
+    // v36: PROPER IPD. With 1 world unit = 1 mm, real human IPD is 64. Using 0.07 (70 µm)
+    // before gave essentially zero parallax — that was the actual bug. Don't change this
+    // unless you really know what you're doing.
+    stereoCam.eyeSep = 64;
     function renderStereo(){
       const halfW = innerWidth/2, h = innerHeight;
       // v31: pass FULL aspect — StereoCamera applies its own 0.5x for the half viewport.
       // Halving here too was the actual cause of the "double" outside close-up.
+      // v36: full window aspect (NOT halved) — StereoCamera builds asymmetric frusta from
+       // this and the per-eye viewport renders correctly. Halving here squashes the image.
       camera.aspect = innerWidth/h;
       const prevFov = camera.fov, prevFocus = camera.focus;
-      camera.fov = calib.fov;
-      camera.focus = calib.manualFocus ? calib.focus : probeConvergence();
+      camera.fov = 70;
+      // Focus = convergence depth, in mm. probeConvergence tracks the chip-surface intercept.
+      camera.focus = probeConvergence();
+      // Camera might be parented or not — be safe.
+      camera.updateMatrixWorld(true);
       camera.updateProjectionMatrix();
 
       stereoCam.update(camera);
@@ -1002,28 +982,7 @@
       }
     };
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
-    document.getElementById('calibBtn').onclick=()=>{ const c=document.getElementById('calib'); c.style.display=(c.style.display==='none')?'flex':'none'; };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
-    motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); } else { await enablePhoneMotion(true); } };
-    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-enablePhoneMotion(true); } };
-    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
-    refreshUiVisibility();
-  })();
-  </script>
-</body>
-</html>
-bility();
-  })();
-  </script>
-</body>
-</html>
-Fullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
     motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); } else { await enablePhoneMotion(true); } };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
     refreshUiVisibility();
