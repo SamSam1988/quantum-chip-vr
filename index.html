@@ -513,7 +513,7 @@
     // v23: stronger aircraft-with-flaps LIFT. At pitch=0 (looking at horizon) the photon
     // climbs hard — you'd need a noticeable nose-down attitude (~-30°) to maintain altitude,
     // or push the nose down further to actually dive.
-    const LIFT_FACTOR = 0.60;
+    const LIFT_FACTOR = 0.95; // v38: stronger lift so you can pull out of steep dives
 
     // v28: depth-probe stereo. Cast a ray from the camera in the look direction every
     // frame and use the FIRST geometry hit as the convergence distance. That way the eyes
@@ -754,7 +754,7 @@
       if (!game.active) return;
       // spin phi fast, drift theta slowly toward 0
       game.phi += dt * 2.4;
-      game.theta -= dt * (Math.PI/2 / 60); // decays to |0⟩ in ~60 s
+      game.theta -= dt * (Math.PI/2 / 150); // v38: decays to |0⟩ in ~150 s
       if (game.theta < 0) game.theta = 0;
       // project the vector onto our 2D bloch view (z up = |0⟩, x = real Bloch x)
       const sinT = Math.sin(game.theta), cosT = Math.cos(game.theta);
@@ -777,11 +777,26 @@
     function endGame(won, reason){
       if (!game.active) return;
       game.active=false; game.won=won; game.lost=!won; game.lostReason=reason||'';
-      const title = won ? 'VICTORY' : 'STATE LOST';
+      const title = won ? 'VICTORY' : 'GAME OVER';
       const colour = won ? '#59ffc0' : '#ff5577';
-      gameMsg.innerHTML='<h2 style="color:'+colour+'">'+title+'</h2><div>'+(won?'All flux vortices eliminated, coherence preserved.':reason)+'</div><button id="gameMsgClose">CLOSE</button>';
+      gameMsg.innerHTML='<h2 style="color:'+colour+'">'+title+'</h2>'
+        +'<div>'+(won?'All flux vortices eliminated, coherence preserved.':reason)+'</div>'
+        +'<div style="margin-top:8px;display:flex;gap:8px;justify-content:center">'
+        +'<button id="gameMsgRetry">TRY AGAIN</button>'
+        +'<button id="gameMsgClose" style="background:#dde8ff;color:#06101f">EXIT</button>'
+        +'</div>';
       gameMsg.style.display='block';
       document.getElementById('gameMsgClose').onclick=()=>{ gameMsg.style.display='none'; blochEl.classList.remove('on'); vortexCountEl.classList.remove('on'); while(vortexGroup.children.length)vortexGroup.remove(vortexGroup.children[0]); };
+      document.getElementById('gameMsgRetry').onclick=()=>{
+        gameMsg.style.display='none';
+        while(vortexGroup.children.length)vortexGroup.remove(vortexGroup.children[0]);
+        spawnVortices();
+        game.active=true; game.won=false; game.lost=false;
+        game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
+        doReset();
+        vcSpan.textContent='5';
+        blochEl.classList.add('on'); vortexCountEl.classList.add('on');
+      };
     }
 
     function gameStep(dt){
