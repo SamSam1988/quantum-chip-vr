@@ -450,7 +450,7 @@
     const trenchPolys=trench134.map(poly=>({poly,b:polyBounds(poly)}));
     function pointInPoly(x,y,poly){ let inside=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const xi=poly[i][0]-bbox[0], yi=poly[i][1]-bbox[1], xj=poly[j][0]-bbox[0], yj=poly[j][1]-bbox[1]; const hit=((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi+1e-9)+xi); if(hit) inside=!inside; } return inside; }
     function isInTrench(x,y){ for(const t of trenchPolys){ const b=t.b; if(x+bbox[0]>=b.minx && x+bbox[0]<=b.maxx && y+bbox[1]>=b.miny && y+bbox[1]<=b.maxy && pointInPoly(x,y,t.poly)) return true; } return false; }
-    function floorZAt(x,y){ return isInTrench(x,y) ? 0 : NB_THICKNESS_UM; }
+    function floorZAt(x,y){ return 75; } // v44: invisible glass floor at 75 µm — can never get closer
     status.textContent='v22: brighter Nb, lift-on-level, stereo IPD, cardboard mini-map HUD.'; setTimeout(()=>status.classList.add('hidden'),5500);
 
     // ---- Minimap: cache the static chip layout once, then redraw player dot each frame.
@@ -543,7 +543,7 @@
         const d3 = Math.sqrt(dxy*dxy + state.z*state.z);
         if (d3 < minD) minD = d3;
       }
-      const RANGE = 800; // v30
+      const RANGE = 400; // v45: tighter
       if (minD > RANGE) return;
       const f = 1 - (minD / RANGE);
       const interval = 420 - 365 * f;
@@ -796,7 +796,7 @@
       if (!running) return; // v40: PAUSE freezes decay
       // spin phi fast, drift theta slowly toward 0
       game.phi += dt * 2.4;
-      game.theta -= dt * (Math.PI/2 / 600); // v40: decays to |0⟩ in ~600 s (4× slower)
+      game.theta -= dt * (Math.PI/2 / 300); // v45: decays in ~300 s (half of previous)
       if (game.theta < 0) game.theta = 0;
       // project the vector onto our 2D bloch view (z up = |0⟩, x = real Bloch x)
       const sinT = Math.sin(game.theta), cosT = Math.cos(game.theta);
@@ -873,7 +873,7 @@
         if (d3 < minSquid) minSquid = d3;
       }
       const warn = document.getElementById('squidWarn');
-      if (minSquid < 250){ warn.classList.add('warn'); } else { warn.classList.remove('warn'); }
+      if (minSquid < 450){ warn.classList.add('warn'); } else { warn.classList.remove('warn'); }
       if (minSquid < 100){ warn.classList.remove('warn'); endGame(false, 'Too close to a SQUID — quantum state lost.'); return; }
       // v41: fall off the chip = death
       const PAD = 50;
@@ -993,6 +993,10 @@
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
     refreshUiVisibility();
   })();
+  </script>
+</body>
+</html>
+;
   </script>
 </body>
 </html>
