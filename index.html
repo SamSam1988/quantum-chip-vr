@@ -283,7 +283,7 @@
     }
 
     function makeTexture(){
-      const S=12288, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
+      const S=4096, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d'); // v43: was 12288 (600MB), now 4096 (67MB) — mobile-friendly
       // v13: transparent background — the 3D Nb extrusion is the visual base.
       // Don't paint layer 134 (it's real geometry now); paint other layers as ID overlays.
       g.clearRect(0,0,S,S);
@@ -979,4 +979,20 @@
     async function tryLockLandscape(){
       try{
         if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
-        if (screen.orientation && screen.orientation.lo
+        if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+      }catch(e){}
+    }
+    startBtn.onclick=()=>{ tryLockLandscape(); running=!running; startBtn.textContent=running?'PAUSE':'START'; };
+    slowerBtn.onclick=()=>{ if (speedLevel>0) speedLevel--; refreshSpeed(); if (navigator.vibrate) try{navigator.vibrate(10);}catch(e){} };
+    fasterBtn.onclick=()=>{ if (speedLevel<SPEEDS.length-1) speedLevel++; refreshSpeed(); if (navigator.vibrate) try{navigator.vibrate(10);}catch(e){} };
+    refreshSpeed();
+    gameBtn.onclick=()=>{ tryLockLandscape(); startGame(); };
+    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
+    document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
+    motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); } else { await enablePhoneMotion(true); } };
+    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
