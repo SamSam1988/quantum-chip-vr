@@ -9,8 +9,6 @@
     /* v35: ordinary view — buttons stacked RIGHT, just above dashboard, 30% larger, in pairs */
     #ui{position:fixed;right:8px;bottom:120px;z-index:10;display:flex;flex-direction:column;gap:3px;max-width:none;align-items:flex-end}
     #ui .ui-row{display:flex;gap:3px;justify-content:flex-end}
-    /* in cardboard mode rows un-flex (stack vertically again) */
-    body.cardboard #ui .ui-row{flex-direction:column}
     button{border:0;border-radius:5px;padding:5px 8px;font-weight:800;font-size:9px;background:#59ffc0;color:#02110c;box-shadow:0 0 7px rgba(89,255,192,.25);cursor:pointer}
     button.secondary{background:#ffe16b;color:#100d00}
     button.dark{background:#dde8ff;color:#06101f}
@@ -66,9 +64,7 @@
       <button id="startBtn">START</button>
       <button class="boost" id="boostBtn">BOOST: OFF</button>
     </div>
-    <div class="ui-row">
-      <button class="dark" id="cardboardBtn">3D: OFF</button>
-    </div>
+    <button id="gameBtn">GAME MODE</button>
     <div class="ui-row">
       <button class="dark" id="resetBtn">RESET</button>
       <button class="dark" id="fullBtn">FULL SCREEN</button>
@@ -102,94 +98,29 @@
     </div>
   </div>
 
-  <!-- v24: cardboard HUDs now only carry the minimap + Qarakal logo; speed and altitude
-       moved into the ADI readout below. -->
-  <div id="cb-hud-left" class="cb-hud">
-    <canvas class="cb-map" width="120" height="120"></canvas>
-    <img class="cbLogo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.style.display='none'" />
-  </div>
-  <div id="cb-hud-right" class="cb-hud">
-    <canvas class="cb-map" width="120" height="120"></canvas>
-    <img class="cbLogo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.style.display='none'" />
-  </div>
-
-  <!-- v23: real aircraft Attitude Director Indicator (ADI). The big #center one is used
-       outside cardboard; the two .cb-adi clones below are used in cardboard, one per eye. -->
-  <template id="adiTemplate">
-    <svg viewBox="-50 -50 100 100" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <clipPath class="adiClip"><circle cx="0" cy="0" r="42"/></clipPath>
-        <linearGradient class="skyGrad" x1="0" y1="-1" x2="0" y2="0">
-          <stop offset="0%"   stop-color="#0d4a8a"/>
-          <stop offset="100%" stop-color="#5fa8e8"/>
-        </linearGradient>
-        <linearGradient class="grdGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stop-color="#8c5a26"/>
-          <stop offset="100%" stop-color="#3a2310"/>
-        </linearGradient>
-      </defs>
-      <!-- the rolling/pitching ball, clipped to the round bezel -->
-      <g class="adiBall" clip-path="url(#adiClip)">
-        <g class="adiPitch">
-          <!-- sky and ground halves, oversized so they cover under pitch travel -->
-          <rect class="sky" x="-120" y="-200" width="240" height="200" fill="url(#skyGrad)"/>
-          <rect class="grd" x="-120" y="0"    width="240" height="200" fill="url(#grdGrad)"/>
-          <!-- horizon line -->
-          <line x1="-70" y1="0" x2="70" y2="0" stroke="#fff" stroke-width="1.2"/>
-          <!-- pitch ladder above and below -->
-          <g stroke="#fff" stroke-width="0.55" fill="#fff" font-family="system-ui" font-size="3.5" text-anchor="middle">
-            <line x1="-9"  y1="-7"  x2="9"  y2="-7"/>
-            <line x1="-13" y1="-14" x2="13" y2="-14"/><text x="-17" y="-12.5">10</text><text x="17" y="-12.5">10</text>
-            <line x1="-9"  y1="-21" x2="9"  y2="-21"/>
-            <line x1="-13" y1="-28" x2="13" y2="-28"/><text x="-17" y="-26.5">20</text><text x="17" y="-26.5">20</text>
-            <line x1="-9"  y1="-35" x2="9"  y2="-35"/>
-            <line x1="-9"  y1="7"   x2="9"  y2="7"/>
-            <line x1="-13" y1="14"  x2="13" y2="14"/><text x="-17" y="15.5">10</text><text x="17" y="15.5">10</text>
-            <line x1="-9"  y1="21"  x2="9"  y2="21"/>
-            <line x1="-13" y1="28"  x2="13" y2="28"/><text x="-17" y="29.5">20</text><text x="17" y="29.5">20</text>
-            <line x1="-9"  y1="35"  x2="9"  y2="35"/>
-          </g>
-        </g>
-      </g>
-      <!-- fixed bezel ring -->
-      <circle cx="0" cy="0" r="42" fill="none" stroke="#0a0d12" stroke-width="3"/>
-      <circle cx="0" cy="0" r="42" fill="none" stroke="#2a3340" stroke-width="1"/>
-      <!-- fixed center boresight: yellow aircraft wings + dot -->
-      <g stroke="#ffe700" stroke-width="2" fill="none" stroke-linecap="round">
-        <line x1="-26" y1="0" x2="-10" y2="0"/>
-        <line x1="-10" y1="0" x2="-7"  y2="4"/>
-        <line x1=" 26" y1="0" x2=" 10" y2="0"/>
-        <line x1=" 10" y1="0" x2=" 7"  y2="4"/>
-      </g>
-      <circle cx="0" cy="0" r="1.6" fill="#ffe700"/>
-      <!-- pitch reference indicator at top of bezel -->
-      <polygon points="0,-44 -3,-39 3,-39" fill="#ffe700"/>
-      <!-- side tick marks every 30° for roll reference -->
-      <g stroke="#dde8ff" stroke-width="0.9" stroke-linecap="round" opacity="0.85">
-        <line x1="-42" y1="0" x2="-46" y2="0"/>
-        <line x1=" 42" y1="0" x2=" 46" y2="0"/>
-        <line x1="0" y1="-42" x2="0" y2="-46"/>
-        <line x1="0" y1=" 42" x2="0" y2=" 46"/>
-      </g>
+  <!-- v37: game-mode panels -->
+  <div id="vortexCount">VORTICES: <span id="vc">5</span> / 5</div>
+  <div id="bloch">
+    <div class="lbl">QUBIT STATE</div>
+    <svg viewBox="-60 -60 120 120">
+      <!-- equator and outline -->
+      <ellipse cx="0" cy="0" rx="50" ry="50" fill="none" stroke="#3a4a66" stroke-width="1"/>
+      <ellipse cx="0" cy="0" rx="50" ry="14" fill="none" stroke="#3a4a66" stroke-width="0.6" stroke-dasharray="2 2"/>
+      <!-- z axis -->
+      <line x1="0" y1="-58" x2="0" y2="58" stroke="#445566" stroke-width="0.5"/>
+      <line x1="-56" y1="0" x2="56" y2="0" stroke="#445566" stroke-width="0.5"/>
+      <!-- |0> and |1> labels -->
+      <text x="0" y="-52" fill="#9bc2ff" font-size="8" text-anchor="middle" font-family="serif" font-style="italic">|0⟩</text>
+      <text x="0" y="58"  fill="#ff9bbc" font-size="8" text-anchor="middle" font-family="serif" font-style="italic">|1⟩</text>
+      <!-- state vector — JS animates this -->
+      <line id="blochVec" x1="0" y1="0" x2="0" y2="-50" stroke="#ff3a8a" stroke-width="2.2" stroke-linecap="round"/>
+      <circle id="blochTip" cx="0" cy="-50" r="2.6" fill="#ff3a8a"/>
     </svg>
-  </template>
-
+    <div class="dirac" id="blochDirac">|ψ⟩ = |+⟩</div>
+    <div class="vc" id="blochCoh">coherence: 100%</div>
+  </div>
+  <div id="gameMsg"></div>
   <div id="center"></div>
-  <div id="cb-adi-left"  class="cb-adi">
-    <div class="adi-readout"><span class="cbSpeed">—</span><span class="u">µm/s</span><span class="sep">|</span><span class="cbAlt">—</span><span class="u">µm</span></div>
-    <div class="adi-svg"></div>
-  </div>
-  <div id="cb-adi-right" class="cb-adi">
-    <div class="adi-readout"><span class="cbSpeed">—</span><span class="u">µm/s</span><span class="sep">|</span><span class="cbAlt">—</span><span class="u">µm</span></div>
-    <div class="adi-svg"></div>
-  </div>
-
-  <!-- v23: forced-landscape prompt -->
-  <div id="rotateOverlay">
-    <div class="icon"></div>
-    <div style="font-size:16px;font-weight:800;letter-spacing:.05em">ROTATE TO LANDSCAPE</div>
-    <div style="font-size:12px;opacity:.78;max-width:280px">Cardboard mode needs the phone held sideways.</div>
-  </div>
   <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
   <script src="chip-data.js"></script>
   <script>
@@ -197,8 +128,7 @@
     const status=document.getElementById('status'), hud=document.getElementById('hud'),
           speedValue=document.getElementById('speedValue'), needle=document.getElementById('needle'),
           altValue=document.getElementById('altValue'), altNeedle=document.getElementById('altNeedle');
-    const cbHudL=document.getElementById('cb-hud-left'), cbHudR=document.getElementById('cb-hud-right');
-    let running=false, cardboard=false, motion=false, boost=false;
+    let running=false, motion=false, boost=false;
     let yaw=0, pitch=-0.42, targetYaw=0, targetPitch=-0.42, lastT=performance.now();
     let initialOri=null, currentOri=null;
     const data=window.CHIP_DATA || {bbox:[0,0,10000,10000],layers:{}};
@@ -725,47 +655,185 @@
         const s = 0.55 + 0.55*squidPulse;
         p.scale.set(s, s, 1);
       }
-      if(cardboard){
-        renderStereo();
-      } else {
-        camera.aspect=innerWidth/innerHeight;
-        camera.fov = 70;
-        camera.updateProjectionMatrix();
-        renderer.setViewport(0,0,innerWidth,innerHeight);
-        renderer.render(scene,camera);
-      }
+      gameStep(dt);
+      camera.aspect=innerWidth/innerHeight;
+      camera.fov = 70;
+      camera.updateProjectionMatrix();
+      renderer.setViewport(0,0,innerWidth,innerHeight);
+      renderer.render(scene,camera);
     }
     requestAnimationFrame(step);
 
-    // ---- v23: ADI plumbing. Clone the SVG template into the three ADI containers
-    // (the centered one for non-cardboard, plus one per eye for cardboard).
-    const adiTemplate = document.getElementById('adiTemplate');
-    // v24: in cardboard the SVG goes INTO the .adi-svg sub-container (the readout sits
-     // above it). For non-cardboard the SVG goes directly into #center.
-    const adiHosts = [
-      document.getElementById('center'),
-      document.querySelector('#cb-adi-left  .adi-svg'),
-      document.querySelector('#cb-adi-right .adi-svg')
-    ].filter(Boolean);
-    const adiPitchGroups = [];
-    for (const host of adiHosts){
-      try {
-        const clone = adiTemplate.content.cloneNode(true);
-        host.appendChild(clone);
-        const g = host.querySelector('.adiPitch');
-        if (g) adiPitchGroups.push(g);
-      } catch(e){ /* template/clone unsupported — silently skip */ }
-    }
-    // Pixels of vertical horizon travel per radian of pitch. 50 ≈ realistic ladder range
-    // (~±50° before the ladder runs out of the bezel window).
-    const ADI_PX_PER_RAD = 50;
-    function updateADI(){
-      const dy = pitch * ADI_PX_PER_RAD;
-      // SVG +Y is DOWN. Pitch UP (positive) should move the horizon DOWN in the indicator
-      // (so more ground shows), matching how a real ADI behaves.
-      for (const g of adiPitchGroups){
-        g.setAttribute('transform', `translate(0 ${dy.toFixed(2)})`);
+    function updateADI(){}
+
+    // ===================================================================================
+    // v37: GAME MODE — eliminate 5 flux vortices near SQUIDs before the qubit state decays.
+    // Pass over a vortex at z<200 µm to eliminate it. Avoid getting within 100 µm of a SQUID.
+    // ===================================================================================
+    const game = { active:false, theta:Math.PI/2, phi:0, vortices:[], won:false, lost:false, lostReason:'', startT:0 };
+    const vortexGroup = new THREE.Group(); scene.add(vortexGroup);
+    const blochEl = document.getElementById('bloch');
+    const blochVec = document.getElementById('blochVec');
+    const blochTip = document.getElementById('blochTip');
+    const blochDirac = document.getElementById('blochDirac');
+    const blochCoh = document.getElementById('blochCoh');
+    const vortexCountEl = document.getElementById('vortexCount');
+    const vcSpan = document.getElementById('vc');
+    const gameMsg = document.getElementById('gameMsg');
+
+    function buildVortexMesh(){
+      // Red spiral, drawn into a canvas texture, on a flat plane that we point upward
+      const cv = document.createElement('canvas'); cv.width=cv.height=256;
+      const cg = cv.getContext('2d');
+      // radial red glow background
+      const grd = cg.createRadialGradient(128,128,4,128,128,128);
+      grd.addColorStop(0,'rgba(255,255,200,1)');
+      grd.addColorStop(0.10,'rgba(255,80,80,0.95)');
+      grd.addColorStop(0.45,'rgba(255,30,30,0.55)');
+      grd.addColorStop(1,'rgba(120,0,0,0)');
+      cg.fillStyle=grd; cg.fillRect(0,0,256,256);
+      // spiral arms
+      cg.strokeStyle='rgba(255,230,230,0.92)'; cg.lineWidth=4;
+      for (let arm=0; arm<3; arm++){
+        cg.beginPath();
+        for (let t=0; t<6.28*1.5; t+=0.04){
+          const r = 8 + t*11;
+          const a = t + arm*(6.28/3);
+          const x = 128 + Math.cos(a)*r;
+          const y = 128 + Math.sin(a)*r;
+          if (t===0) cg.moveTo(x,y); else cg.lineTo(x,y);
+        }
+        cg.stroke();
       }
+      const tex = new THREE.CanvasTexture(cv);
+      const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending});
+      const sizeUm = 380;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeUm/UM_PER_UNIT, sizeUm/UM_PER_UNIT), mat);
+      // point light for "radiating red"
+      const light = new THREE.PointLight(0xff3030, 3, 2.0, 2);
+      mesh.add(light);
+      return mesh;
+    }
+
+    function spawnVortices(){
+      // clear any prior
+      while (vortexGroup.children.length) vortexGroup.remove(vortexGroup.children[0]);
+      game.vortices = [];
+      // place 5 vortices NEAR (but not on) qubits — offset 350 µm in some direction
+      const pickQubits = [0,1,2,3,4]; // first 5 of the 8 qubitCenters
+      for (let i=0;i<5;i++){
+        const [cx,cy] = qubitCenters[pickQubits[i]];
+        const ang = i*(Math.PI*2/5) + 0.4;
+        const r = 380;
+        const vx = cx + Math.cos(ang)*r;
+        const vy = cy + Math.sin(ang)*r;
+        const mesh = buildVortexMesh();
+        mesh.position.set((vx-chipUm.w/2)/UM_PER_UNIT,(vy-chipUm.h/2)/UM_PER_UNIT, (NB_THICKNESS_UM+8)/UM_PER_UNIT);
+        mesh.userData.spinPhase = i*0.7;
+        vortexGroup.add(mesh);
+        game.vortices.push({x:vx,y:vy,mesh,alive:true});
+      }
+    }
+
+    function diracStr(theta, phi){
+      // |ψ⟩ = cos(θ/2)|0⟩ + e^{iφ}sin(θ/2)|1⟩
+      const c = Math.cos(theta/2), s = Math.sin(theta/2);
+      const fmt = (n)=> (Math.abs(n)<0.005)?'0':n.toFixed(2);
+      // small helper to format the phase part: e^{iφ}
+      let phaseStr='';
+      const phase = ((phi%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
+      if (Math.abs(phase) < 0.05 || Math.abs(phase-2*Math.PI)<0.05) phaseStr=''; // 0 → +
+      else if (Math.abs(phase-Math.PI)<0.05) phaseStr='−';                       // π → −
+      else phaseStr = 'e^{i·'+phase.toFixed(2)+'}·';
+      if (Math.abs(s)<0.005) return '|ψ⟩ = |0⟩';
+      if (Math.abs(c)<0.005) return '|ψ⟩ = '+phaseStr+'|1⟩';
+      return '|ψ⟩ = '+fmt(c)+'|0⟩ + '+phaseStr+fmt(s)+'|1⟩';
+    }
+
+    function updateBloch(t, dt){
+      if (!game.active) return;
+      // spin phi fast, drift theta slowly toward 0
+      game.phi += dt * 2.4;
+      game.theta -= dt * (Math.PI/2 / 60); // decays to |0⟩ in ~60 s
+      if (game.theta < 0) game.theta = 0;
+      // project the vector onto our 2D bloch view (z up = |0⟩, x = real Bloch x)
+      const sinT = Math.sin(game.theta), cosT = Math.cos(game.theta);
+      const X = sinT * Math.cos(game.phi);
+      // we display in a 2D circle: x maps to screen-x, z maps to -screen-y (|0⟩ at top)
+      const sx = X * 50;
+      const sy = -cosT * 50;
+      blochVec.setAttribute('x2', sx.toFixed(1));
+      blochVec.setAttribute('y2', sy.toFixed(1));
+      blochTip.setAttribute('cx', sx.toFixed(1));
+      blochTip.setAttribute('cy', sy.toFixed(1));
+      blochDirac.textContent = diracStr(game.theta, game.phi);
+      // coherence = how far the state still is from |0⟩; sin(θ) is the "magnitude of |1⟩" part
+      const coh = Math.round(sinT*100);
+      blochCoh.textContent = 'coherence: '+coh+'%';
+      // lose: state decayed
+      if (game.theta < 0.04) endGame(false, 'Your quantum state decohered to |0⟩.');
+    }
+
+    function endGame(won, reason){
+      if (!game.active) return;
+      game.active=false; game.won=won; game.lost=!won; game.lostReason=reason||'';
+      const title = won ? 'VICTORY' : 'STATE LOST';
+      const colour = won ? '#59ffc0' : '#ff5577';
+      gameMsg.innerHTML='<h2 style="color:'+colour+'">'+title+'</h2><div>'+(won?'All flux vortices eliminated, coherence preserved.':reason)+'</div><button id="gameMsgClose">CLOSE</button>';
+      gameMsg.style.display='block';
+      document.getElementById('gameMsgClose').onclick=()=>{ gameMsg.style.display='none'; blochEl.classList.remove('on'); vortexCountEl.classList.remove('on'); while(vortexGroup.children.length)vortexGroup.remove(vortexGroup.children[0]); };
+    }
+
+    function gameStep(dt){
+      // spin all live vortices
+      const tt = performance.now()/1000;
+      for (const v of game.vortices){
+        if (!v.alive) continue;
+        v.mesh.rotation.z = tt*3.0 + v.mesh.userData.spinPhase;
+        const breath = 0.85 + 0.30*Math.sin(tt*2.8 + v.mesh.userData.spinPhase);
+        v.mesh.scale.set(breath,breath,1);
+      }
+      if (!game.active) return;
+      updateBloch(tt, dt);
+      // collisions — passing OVER vortex at z<=200 µm = kill it. Passing within 100 µm of SQUID = lose.
+      for (const v of game.vortices){
+        if (!v.alive) continue;
+        const dxy = Math.hypot(state.x - v.x, state.y - v.y);
+        if (dxy < 180 && state.z < 200){
+          v.alive = false;
+          v.mesh.visible = false;
+          if (navigator.vibrate) try{ navigator.vibrate([20,30,40]); }catch(e){}
+          const left = game.vortices.filter(g=>g.alive).length;
+          vcSpan.textContent = left;
+          if (left===0) endGame(true);
+        }
+      }
+      for (const [cx,cy] of qubitCenters){
+        const d3 = Math.hypot(state.x-cx, state.y-cy, state.z);
+        if (d3 < 100){ endGame(false, 'You hit a SQUID. Quantum state destroyed.'); return; }
+      }
+    }
+
+    function startGame(){
+      // explain rules
+      gameMsg.innerHTML='<h2>GAME MODE</h2>'
+        +'<div style="text-align:left;line-height:1.6">'
+        +'• 5 flux vortices (red spirals) have appeared near the qubits.<br/>'
+        +'• Fly OVER them at altitude < <b>200 µm</b> to eliminate each.<br/>'
+        +'• Do NOT get within <b>100 µm</b> of any SQUID — it will destroy the state.<br/>'
+        +'• Your qubit state decays toward |0⟩. Beat the clock before it reaches the pole.'
+        +'</div><button id="gameMsgStart">BEGIN</button>';
+      gameMsg.style.display='block';
+      document.getElementById('gameMsgStart').onclick=()=>{
+        gameMsg.style.display='none';
+        spawnVortices();
+        game.active=true; game.won=false; game.lost=false;
+        game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
+        blochEl.classList.add('on');
+        vortexCountEl.classList.add('on');
+        vcSpan.textContent='5';
+        if (!running){ running=true; startBtn.textContent='PAUSE'; }
+      };
     }
 
     let dragging=false,lastX=0,lastY=0;
@@ -776,14 +844,9 @@
 
     const startBtn=document.getElementById('startBtn');
     const boostBtn=document.getElementById('boostBtn');
-    const cardboardBtn=document.getElementById('cardboardBtn');
+    const gameBtn=document.getElementById('gameBtn');
     const motionBtn=document.getElementById('motionBtn');
-
-    function refreshUiVisibility(){
-      // The 'cardboard' body class drives all the CSS — vertical button stack, hidden motion
-      // button, hidden main HUD, visible per-eye cardboard HUDs.
-      document.body.classList.toggle('cardboard', cardboard);
-    }
+    function refreshUiVisibility(){}
 
     // Phone motion enable, factored out so cardboard mode can auto-enable it.
     async function enablePhoneMotion(showStatus){
@@ -822,60 +885,6 @@
       if (navigator.vibrate) { try{ navigator.vibrate(30);}catch(e){} }
     }
 
-    // v23: force landscape on entering cardboard. Needs fullscreen + a user gesture;
-    // falls back silently to the CSS rotate-phone overlay if the platform refuses.
-    async function lockLandscape(){
-      try {
-        if (screen.orientation && screen.orientation.lock){
-          await screen.orientation.lock('landscape');
-        }
-      } catch(e){ /* unsupported — overlay still prompts the user */ }
-    }
-
-    // v23: keep the screen at full brightness — phones aggressively dim/sleep otherwise,
-    // which would be a disaster inside a cardboard headset.
-    let wakeLock = null;
-    async function requestWakeLock(){
-      try {
-        if ('wakeLock' in navigator){
-          wakeLock = await navigator.wakeLock.request('screen');
-          wakeLock.addEventListener('release', ()=>{ wakeLock=null; });
-        }
-      } catch(e){ /* user can extend the phone's screen timeout manually */ }
-    }
-    document.addEventListener('visibilitychange', ()=>{
-      // If we lose the page (tab switch) and come back while still in cardboard, re-acquire.
-      if (document.visibilityState === 'visible' && cardboard && !wakeLock) requestWakeLock();
-    });
-
-    let lastResetT = 0;
-    renderer.domElement.addEventListener('touchstart', ()=>{
-      if (!cardboard) return;
-      const now = performance.now();
-      if (now - lastResetT < 400) return;
-      lastResetT = now;
-      doReset();
-    }, {passive: true});
-    (function setupMagnet(){
-      if (!('Magnetometer' in window)) return;
-      try {
-        const sensor = new window.Magnetometer({frequency: 30});
-        let lastMag = null;
-        sensor.addEventListener('reading', ()=>{
-          const m = Math.sqrt(sensor.x*sensor.x + sensor.y*sensor.y + sensor.z*sensor.z);
-          if (lastMag !== null){
-            const d = Math.abs(m - lastMag);
-            if (d > 80 && cardboard){
-              const now = performance.now();
-              if (now - lastResetT > 700){ lastResetT = now; doReset(); }
-            }
-          }
-          lastMag = m;
-        });
-        sensor.start();
-      } catch(e){}
-    })();
-
     startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START'; };
     boostBtn.onclick=()=>{
       boost=!boost;
@@ -883,21 +892,7 @@
       boostBtn.classList.toggle('active', boost);
       if (boost && navigator.vibrate) { try{ navigator.vibrate(20);}catch(e){} }
     };
-    cardboardBtn.onclick=async()=>{
-      cardboard=!cardboard;
-      cardboardBtn.textContent='3D: '+(cardboard?'ON':'OFF');
-      refreshUiVisibility();
-      if (cardboard){
-        if (!motion) await enablePhoneMotion(false);
-        if (!running){ running = true; startBtn.textContent = 'PAUSE'; }
-        try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
-        await lockLandscape();
-        await requestWakeLock();
-      } else {
-        if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
-        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
-      }
-    };
+    gameBtn.onclick=()=>{ startGame(); };
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
     motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); } else { await enablePhoneMotion(true); } };
