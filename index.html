@@ -49,6 +49,11 @@
     #bloch .lbl{font-size:9px;opacity:.7;margin-bottom:3px}
     #vortexCount{position:fixed;left:8px;top:8px;z-index:10;background:rgba(0,0,0,.6);padding:5px 9px;border-radius:8px;color:#fff;font:bold 12px system-ui,sans-serif;display:none}
     #vortexCount.on{display:block}
+    /* v39: force landscape — overlay covers screen if phone is in portrait. */
+    #rotateOverlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(8,18,30,.96);color:#fff;align-items:center;justify-content:center;flex-direction:column;gap:14px;font:14px system-ui,sans-serif;text-align:center;padding:24px}
+    @media (orientation:portrait) and (max-width:1100px){ #rotateOverlay{display:flex} }
+    #rotateOverlay .icon{width:64px;height:64px;border:3px solid #59ffc0;border-radius:10px;box-shadow:0 0 16px rgba(89,255,192,.45);animation:rotPrompt 1.8s ease-in-out infinite}
+    @keyframes rotPrompt{0%{transform:rotate(0)} 50%,100%{transform:rotate(90deg)}}
 
     #status{position:fixed;right:8px;top:8px;z-index:10;background:rgba(0,0,0,.62);padding:8px 10px;border-radius:8px;font-size:11px;transition:opacity .7s ease}
     #status.hidden{opacity:0;pointer-events:none}
@@ -121,6 +126,7 @@
   </div>
   <div id="gameMsg"></div>
   <div id="center"></div>
+  <div id="rotateOverlay"><div class="icon"></div><div style="font-size:16px;font-weight:800">ROTATE TO LANDSCAPE</div><div style="font-size:12px;opacity:.78;max-width:280px">This app is designed for landscape orientation.</div></div>
   <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
   <script src="chip-data.js"></script>
   <script>
@@ -480,7 +486,7 @@
       while (dy >  Math.PI) dy -= 2*Math.PI;
       while (dy < -Math.PI) dy += 2*Math.PI;
       yaw += dy * 0.08;
-      pitch += (targetPitch-pitch)*0.08; pitch=Math.max(-1.35,Math.min(1.25,pitch));
+      pitch += (targetPitch-pitch)*0.08; pitch=Math.max(-1.50,Math.min(1.50,pitch));
       const wx=(state.x-chipUm.w/2)/UM_PER_UNIT, wy=(state.y-chipUm.h/2)/UM_PER_UNIT, wz=state.z/UM_PER_UNIT;
       camera.position.set(wx,wy,wz);
       const d=lookDirection();
@@ -595,7 +601,7 @@
         const o = orientationDeg * Math.PI/180;
         const tilt = db*Math.cos(o) - dg*Math.sin(o);
         targetPitch = tilt - .42;
-        targetPitch = Math.max(-1.35, Math.min(1.25, targetPitch));
+        targetPitch = Math.max(-1.50, Math.min(1.50, targetPitch));
       }
       updateCamera();
       const boostFactor = boost ? 5 : 1;
@@ -900,14 +906,21 @@
       if (navigator.vibrate) { try{ navigator.vibrate(30);}catch(e){} }
     }
 
-    startBtn.onclick=()=>{ running=!running; startBtn.textContent=running?'PAUSE':'START'; };
+    // v39: try to lock orientation to landscape (needs fullscreen + user gesture)
+    async function tryLockLandscape(){
+      try{
+        if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+        if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+      }catch(e){}
+    }
+    startBtn.onclick=()=>{ tryLockLandscape(); running=!running; startBtn.textContent=running?'PAUSE':'START'; };
     boostBtn.onclick=()=>{
       boost=!boost;
       boostBtn.textContent='BOOST: '+(boost?'ON x5':'OFF');
       boostBtn.classList.toggle('active', boost);
       if (boost && navigator.vibrate) { try{ navigator.vibrate(20);}catch(e){} }
     };
-    gameBtn.onclick=()=>{ startGame(); };
+    gameBtn.onclick=()=>{ tryLockLandscape(); startGame(); };
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
     motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); } else { await enablePhoneMotion(true); } };
