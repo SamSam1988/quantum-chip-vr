@@ -74,6 +74,9 @@
     #gameHint.on{opacity:1;animation:hintBob 1s ease-in-out infinite alternate}
     @keyframes hintBob{from{transform:translateX(0)}to{transform:translateX(-8px)}}
     #gameHint svg{display:block;width:120px;height:60px;margin-top:-4px}
+    #speedHint{position:fixed;z-index:20;pointer-events:none;font:700 24px 'Caveat',cursive;color:#ffd166;text-shadow:0 0 12px rgba(255,209,102,.6);opacity:0;transition:opacity .5s}
+    #speedHint.on{opacity:1;animation:hintBob 1s ease-in-out infinite alternate}
+    #speedHint svg{display:block;width:120px;height:60px;margin-top:-4px}
     /* v39: force landscape — overlay covers screen if phone is in portrait. */
     #rotateOverlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(8,18,30,.96);color:#fff;align-items:center;justify-content:center;flex-direction:column;gap:14px;font:14px system-ui,sans-serif;text-align:center;padding:24px}
     @media (orientation:portrait) and (max-width:1100px){ #rotateOverlay{display:flex} }
@@ -131,7 +134,14 @@
   <div id="gameHint">
     <span>try Game Mode!</span>
     <svg viewBox="0 0 120 60" fill="none" stroke="#ff7ab3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M 8 30 C 30 20, 60 18, 92 28" stroke-dasharray="0"/>
+      <path d="M 8 30 C 30 20, 60 18, 92 28"/>
+      <polyline points="80,18 94,30 80,38"/>
+    </svg>
+  </div>
+  <div id="speedHint">
+    <span>control speed</span>
+    <svg viewBox="0 0 120 60" fill="none" stroke="#ffd166" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 8 30 C 30 20, 60 18, 92 28"/>
       <polyline points="80,18 94,30 80,38"/>
     </svg>
   </div>
@@ -858,7 +868,7 @@
       if (!running) return; // v40: PAUSE freezes decay
       // spin phi fast, drift theta slowly toward 0
       game.phi += dt * 2.4;
-      game.theta -= dt * (Math.PI/2 / 45); // v49: decay in ~45 s (75% shorter)
+      game.theta -= dt * (Math.PI/2 / 60); // v50: ~60 s decay (30% longer than v49)
       if (game.theta < 0) game.theta = 0;
       // project the vector onto our 2D bloch view (z up = |0⟩, x = real Bloch x)
       const sinT = Math.sin(game.theta), cosT = Math.cos(game.theta);
@@ -881,9 +891,10 @@
     function endGame(won, reason){
       if (!game.active) return;
       game.active=false; game.won=won; game.lost=!won; game.lostReason=reason||'';
-      // v48: on loss → snap state to |0⟩, redden the bloch sphere, stop movement.
+      // v50: stop movement on both win and lose
+      running=false; startBtn.textContent='START';
       if (!won){
-        running=false; startBtn.textContent='START';
+        // on loss → snap state to |0⟩, redden the bloch sphere
         game.theta = 0; blochEl.classList.add('lost');
         blochVec.setAttribute('x2','0'); blochVec.setAttribute('y2','-50');
         blochTip.setAttribute('cx','0'); blochTip.setAttribute('cy','-50');
@@ -1035,6 +1046,8 @@
         +'• Your qubit state decays toward |0⟩ — be quick.'
         +'</div><button id="gameMsgStart">BEGIN</button>';
       gameMsg.style.display='block';
+      // v50: freeze movement while the rules popup is open
+      running=false; startBtn.textContent='START';
       document.getElementById('gameMsgStart').onclick=()=>{
         gameMsg.style.display='none';
         blochEl.classList.remove('lost');
@@ -1043,7 +1056,15 @@
         game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
         blochEl.classList.add('on'); vortexCountEl.classList.add('on');
         vcSpan.textContent=game.count; document.getElementById('vcMax').textContent=game.count;
-        if (!running){ running=true; startBtn.textContent='PAUSE'; }
+        running=true; startBtn.textContent='PAUSE';
+        // v50: "control speed" hint above SLOWER/FASTER for 3 s
+        const sh = document.getElementById('speedHint');
+        const sb = document.getElementById('slowerBtn');
+        const r = sb.getBoundingClientRect();
+        sh.style.right = (window.innerWidth - r.left + 10)+'px';
+        sh.style.top   = (r.top + r.height/2 - 30)+'px';
+        sh.classList.add('on');
+        setTimeout(()=>sh.classList.remove('on'), 3000);
       };
     }
 
