@@ -43,6 +43,8 @@
     /* Bloch sphere panel — left side, used in game mode only */
     #bloch{position:fixed;left:8px;top:50%;transform:translateY(-50%);z-index:10;background:radial-gradient(circle at 30% 25%,rgba(40,60,100,.85),rgba(8,14,28,.85));padding:6px;border-radius:12px;border:1px solid rgba(150,180,255,.5);box-shadow:0 0 18px rgba(80,130,210,.4),inset 0 0 18px rgba(80,130,210,.15);display:none;font:10px system-ui,sans-serif;color:#fff;text-align:center;width:120px;box-sizing:content-box}
     #bloch.on{display:block}
+    #bloch.lost{border-color:#ff3a3a;box-shadow:0 0 30px rgba(255,40,40,.85);animation:lostBlink .4s steps(2) infinite;background:radial-gradient(circle at 30% 25%,rgba(160,30,30,.95),rgba(40,0,0,.95))}
+    @keyframes lostBlink{0%{filter:brightness(1)}100%{filter:brightness(1.6)}}
     #bloch svg{display:block;width:120px;height:120px}
     #bloch .dirac{margin-top:3px;font-size:10px;font-family:'Cambria Math','Latin Modern Math',serif;line-height:1.2;width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     #bloch .dirac sup{font-size:7px;line-height:1}
@@ -59,6 +61,13 @@
     @keyframes warnBlink{0%{opacity:.6}100%{opacity:1}}
     #killToast{position:fixed;left:50%;top:35%;transform:translate(-50%,-50%) scale(0.3);z-index:15;color:#fff;font:900 34px system-ui,sans-serif;text-shadow:0 0 22px #ffea3a,0 0 36px #ff7a3a,0 0 60px #ff3030;opacity:0;pointer-events:none;transition:opacity .45s ease-out,transform .55s cubic-bezier(.2,1.6,.4,1);white-space:nowrap}
     #killToast.show{opacity:1;transform:translate(-50%,-50%) scale(1.1)}
+    #welcome{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.86);display:flex;align-items:center;justify-content:center;font:14px system-ui,sans-serif;color:#fff;padding:18px}
+    #welcome .box{background:rgba(20,30,50,.95);border:2px solid #59ffc0;border-radius:14px;padding:18px 22px;max-width:480px;text-align:center;box-shadow:0 0 28px rgba(89,255,192,.4)}
+    #welcome h2{margin:0 0 6px;color:#59ffc0}
+    #welcome .row{display:flex;gap:18px;justify-content:center;margin:14px 0;align-items:center}
+    #welcome .opt{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;max-width:140px}
+    #welcome .opt svg{width:38px;height:38px}
+    #welcome button{margin-top:6px;background:#59ffc0;color:#02110c;border:0;border-radius:6px;padding:8px 18px;font-weight:800;font-size:14px;cursor:pointer}
     /* v39: force landscape — overlay covers screen if phone is in portrait. */
     #rotateOverlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(8,18,30,.96);color:#fff;align-items:center;justify-content:center;flex-direction:column;gap:14px;font:14px system-ui,sans-serif;text-align:center;padding:24px}
     @media (orientation:portrait) and (max-width:1100px){ #rotateOverlay{display:flex} }
@@ -68,12 +77,32 @@
     #status{position:fixed;right:8px;top:8px;z-index:10;background:rgba(0,0,0,.62);padding:8px 10px;border-radius:8px;font-size:11px;transition:opacity .7s ease}
     #status.hidden{opacity:0;pointer-events:none}
     /* v23: real aircraft attitude indicator (ADI) — sky/ground ball, pitch ladder, fixed bird */
-    #center{position:fixed;left:50%;bottom:6vh;top:auto;width:160px;height:160px;margin-left:-80px;margin-top:0;z-index:9;pointer-events:none;filter:drop-shadow(0 0 4px rgba(0,0,0,.6))}
+    #center{position:fixed;left:50%;bottom:6vh;top:auto;width:120px;height:120px;margin-left:-60px;margin-top:0;z-index:9;pointer-events:none;filter:drop-shadow(0 0 4px rgba(0,0,0,.6))}
+    #center svg [stroke]:not([opacity]){opacity:.75}
+    #center .lost{filter:none}
     #center svg{display:block;width:100%;height:100%;overflow:hidden}
     canvas{display:block}
   </style>
 </head>
 <body>
+  <div id="welcome">
+    <div class="box">
+      <h2>Photon Flight over Basil 3.0</h2>
+      <div>Fly over Qarakal Quantum's superconducting qubit chip.</div>
+      <div class="row">
+        <div class="opt">
+          <svg viewBox="0 0 40 40" fill="none" stroke="#59ffc0" stroke-width="2.5" stroke-linecap="round"><circle cx="20" cy="20" r="6" fill="#59ffc0"/><line x1="20" y1="6" x2="20" y2="2"/><line x1="20" y1="38" x2="20" y2="34"/><line x1="6" y1="20" x2="2" y2="20"/><line x1="38" y1="20" x2="34" y2="20"/></svg>
+          <div><b>Touch & drag</b><br/>swipe to look around</div>
+        </div>
+        <div style="opacity:.5">OR</div>
+        <div class="opt">
+          <svg viewBox="0 0 40 40" fill="none" stroke="#ffe16b" stroke-width="2.5" stroke-linejoin="round"><rect x="12" y="6" width="16" height="28" rx="2"/><circle cx="20" cy="30" r="1" fill="#ffe16b"/><path d="M 30 20 Q 36 14 32 8" stroke="#ffe16b" stroke-width="1.5"/><polygon points="32,8 35,11 29,11" fill="#ffe16b" stroke="none"/></svg>
+          <div><b>Phone motion</b><br/>tilt the phone to steer</div>
+        </div>
+      </div>
+      <button id="welcomeBtn">ENTER</button>
+    </div>
+  </div>
   <div id="ui">
     <div class="ui-row">
       <button id="startBtn">START</button>
@@ -170,8 +199,8 @@
         <linearGradient id="grdGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8c5a26"/><stop offset="100%" stop-color="#3a2310"/></linearGradient>
       </defs>
       <g clip-path="url(#adiClip)"><g id="adiPitch">
-        <rect x="-120" y="-200" width="240" height="200" fill="url(#skyGrad)" opacity="0.3"/>
-        <rect x="-120" y="0" width="240" height="200" fill="url(#grdGrad)" opacity="0.3"/>
+        <rect x="-120" y="-200" width="240" height="200" fill="url(#skyGrad)" opacity="0.1"/>
+        <rect x="-120" y="0" width="240" height="200" fill="url(#grdGrad)" opacity="0.1"/>
         <line x1="-70" y1="0" x2="70" y2="0" stroke="#fff" stroke-width="1.2"/>
         <g stroke="#fff" stroke-width="0.55" fill="#fff" font-family="system-ui" font-size="3.5" text-anchor="middle">
           <line x1="-9" y1="-7" x2="9" y2="-7"/><line x1="-13" y1="-14" x2="13" y2="-14"/><text x="-17" y="-12.5">10</text><text x="17" y="-12.5">10</text>
@@ -815,7 +844,7 @@
       if (!running) return; // v40: PAUSE freezes decay
       // spin phi fast, drift theta slowly toward 0
       game.phi += dt * 2.4;
-      game.theta -= dt * (Math.PI/2 / 300); // v45: decays in ~300 s (half of previous)
+      game.theta -= dt * (Math.PI/2 / 180); // v48: decay in ~180 s
       if (game.theta < 0) game.theta = 0;
       // project the vector onto our 2D bloch view (z up = |0⟩, x = real Bloch x)
       const sinT = Math.sin(game.theta), cosT = Math.cos(game.theta);
@@ -838,6 +867,14 @@
     function endGame(won, reason){
       if (!game.active) return;
       game.active=false; game.won=won; game.lost=!won; game.lostReason=reason||'';
+      // v48: on loss → snap state to |0⟩, redden the bloch sphere, stop movement.
+      if (!won){
+        running=false; startBtn.textContent='START';
+        game.theta = 0; blochEl.classList.add('lost');
+        blochVec.setAttribute('x2','0'); blochVec.setAttribute('y2','-50');
+        blochTip.setAttribute('cx','0'); blochTip.setAttribute('cy','-50');
+        blochDirac.innerHTML='|ψ⟩=|0⟩'; blochCoh.textContent='coherence: 0%';
+      }
       const title = won ? 'VICTORY' : 'GAME OVER';
       const colour = won ? '#59ffc0' : '#ff5577';
       const harderBtn = won ? '<button id="gameMsgHarder" style="background:#ff7a3d;color:#fff">TRY AGAIN HARDER (+3)</button>' : '';
@@ -850,6 +887,8 @@
       gameMsg.style.display='block';
       function restart(){
         gameMsg.style.display='none';
+        blochEl.classList.remove('lost');
+        running=true; startBtn.textContent='PAUSE';
         while(vortexGroup.children.length)vortexGroup.remove(vortexGroup.children[0]);
         spawnVortices();
         game.active=true; game.won=false; game.lost=false;
@@ -883,8 +922,7 @@
         const d3 = Math.hypot(state.x - v.x, state.y - v.y, state.z);
         if (d3 < 300){
           v.alive = false;
-          v.mesh.visible = false;
-          spawnKillBurst(v.x, v.y);
+          dropPinningHole(v); // v48: black box flies from photon to vortex, vortex shrinks to a dot
           if (navigator.vibrate) try{ navigator.vibrate([20,30,80]); }catch(e){}
           const left = game.vortices.filter(g=>g.alive).length;
           vcSpan.textContent = left;
@@ -907,6 +945,38 @@
       if (state.x < PAD || state.x > chipUm.w-PAD || state.y < PAD || state.y > chipUm.h-PAD){
         endGame(false, 'You flew off the chip — coherence lost in vacuum.'); return;
       }
+    }
+
+    // v48: drop a small black "pinning hole" from in front of the photon onto the vortex,
+    // then leave behind a tiny red glowing dot where the big vortex used to be.
+    function dropPinningHole(v){
+      // black box starts roughly 200 µm in front of and below the photon
+      const f = lookDirection();
+      const sx = (state.x + f.x*200 - chipUm.w/2)/UM_PER_UNIT;
+      const sy = (state.y + f.y*200 - chipUm.h/2)/UM_PER_UNIT;
+      const sz = Math.max(0.1, (state.z - 60)/UM_PER_UNIT);
+      const ex = (v.x - chipUm.w/2)/UM_PER_UNIT;
+      const ey = (v.y - chipUm.h/2)/UM_PER_UNIT;
+      const ez = (NB_THICKNESS_UM + 1)/UM_PER_UNIT;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.08), new THREE.MeshBasicMaterial({color:0x000000}));
+      box.position.set(sx,sy,sz);
+      scene.add(box);
+      const t0 = performance.now();
+      const DUR = 450;
+      function anim(){
+        const a = Math.min(1,(performance.now()-t0)/DUR);
+        box.position.set(sx+(ex-sx)*a, sy+(ey-sy)*a, sz+(ez-sz)*a - 0.5*Math.sin(a*Math.PI)*0.3);
+        box.rotation.x += 0.3; box.rotation.y += 0.4;
+        if (a<1) requestAnimationFrame(anim);
+        else {
+          scene.remove(box);
+          // vortex shrinks to a tiny red dot
+          v.mesh.scale.set(0.18,0.18,1);
+          v.mesh.material.opacity = 0.85;
+          spawnKillBurst(v.x, v.y);
+        }
+      }
+      anim();
     }
 
     // burst of red particles when a vortex dies
@@ -943,7 +1013,7 @@
       gameMsg.innerHTML='<h2>GAME MODE</h2>'
         +'<div style="font-size:11px;opacity:.85;margin-bottom:6px">You are flying over the real CAD of <b>Qarakal Quantum&rsquo;s Basil 3.0</b> device.</div>'
         +'<div style="text-align:left;line-height:1.5">'
-        +'• Kill '+game.count+' <span style="color:#ff5252">red flux vortices</span>: pass within <b>300 µm</b>.<br/>'
+        +'• Eliminate '+game.count+' <span style="color:#ff5252">red flux vortices</span> by flying near them — a pinning hole is deployed automatically.<br/>'
         +'• Stay <b>&gt; 100 µm</b> away from SQUIDs.<br/>'
         +'• Don&rsquo;t fall off the chip.<br/>'
         +'• Your qubit state decays toward |0⟩ — be quick.'
@@ -951,13 +1021,12 @@
       gameMsg.style.display='block';
       document.getElementById('gameMsgStart').onclick=()=>{
         gameMsg.style.display='none';
+        blochEl.classList.remove('lost');
         spawnVortices();
         game.active=true; game.won=false; game.lost=false;
         game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
-        blochEl.classList.add('on');
-        vortexCountEl.classList.add('on');
-        vcSpan.textContent=game.count;
-        document.getElementById('vcMax').textContent=game.count;
+        blochEl.classList.add('on'); vortexCountEl.classList.add('on');
+        vcSpan.textContent=game.count; document.getElementById('vcMax').textContent=game.count;
         if (!running){ running=true; startBtn.textContent='PAUSE'; }
       };
     }
@@ -967,7 +1036,6 @@
     addEventListener('pointerup',()=>dragging=false);
     addEventListener('pointermove',e=>{ if(!dragging||motion) return; targetYaw-=(e.clientX-lastX)*0.005; targetPitch-=(e.clientY-lastY)*0.005; lastX=e.clientX; lastY=e.clientY; });
     addEventListener('deviceorientation',e=>{ currentOri={alpha:e.alpha||0,beta:e.beta||0,gamma:e.gamma||0}; }, true);
-
     const startBtn=document.getElementById('startBtn');
     const slowerBtn=document.getElementById('slowerBtn');
     const fasterBtn=document.getElementById('fasterBtn');
@@ -980,7 +1048,7 @@
       try{
         if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){
           const r=await DeviceOrientationEvent.requestPermission();
-          if(r!=='granted'){ if(showStatus){status.classList.remove('hidden'); status.textContent='Permission denied.';} return false; }
+          if(r!=='granted') return false;
         }
         motion=true; motionBtn.textContent='DISABLE PHONE MOTION';
         initialOri=currentOri||{alpha:0,beta:0,gamma:0};
@@ -994,6 +1062,7 @@
       initialOri=currentOri;
       game.count=5;
       const hb=document.getElementById('harderBtn'); if(hb) hb.textContent='HARDER +3';
+      blochEl.classList.remove('lost');
       if (navigator.vibrate) try{ navigator.vibrate(30);}catch(e){}
     }
     async function tryLockLandscape(){
@@ -1007,7 +1076,28 @@
     fasterBtn.onclick=()=>{ if(speedLevel<SPEEDS.length-1)speedLevel++; refreshSpeed(); };
     refreshSpeed();
     gameBtn.onclick=()=>{ tryLockLandscape(); startGame(); };
-    document.getElementById('harderBtn').onclick=()=>{ game.count=Math.min(25,game.count+3); document.getElementById('harderBtn').textContent='HARDER ('+game.count+')'; };
+    document.getElementById('harderBtn').onclick=()=>{
+      game.count=Math.min(25,game.count+3);
+      document.getElementById('harderBtn').textContent='HARDER ('+game.count+')';
+      if (game.active){
+        for (let i=0;i<3;i++){
+          const qi = Math.floor(Math.random()*qubitCenters.length);
+          const [cx,cy] = qubitCenters[qi];
+          const ang = Math.random()*Math.PI*2;
+          const r = 300 + Math.random()*1200;
+          const vx = cx + Math.cos(ang)*r;
+          const vy = cy + Math.sin(ang)*r;
+          const mesh = buildVortexMesh();
+          mesh.position.set((vx-chipUm.w/2)/UM_PER_UNIT,(vy-chipUm.h/2)/UM_PER_UNIT,(NB_THICKNESS_UM+8)/UM_PER_UNIT);
+          mesh.userData.spinPhase = Math.random()*Math.PI*2;
+          vortexGroup.add(mesh);
+          game.vortices.push({x:vx,y:vy,mesh,alive:true});
+        }
+        vcSpan.textContent = game.vortices.filter(g=>g.alive).length;
+        document.getElementById('vcMax').textContent = game.count;
+      }
+    };
+    document.getElementById('welcomeBtn').onclick=()=>{ document.getElementById('welcome').style.display='none'; };
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
     motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); } else { await enablePhoneMotion(true); } };
