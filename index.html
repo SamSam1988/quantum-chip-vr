@@ -574,18 +574,30 @@
       const W = target.width, H = target.height;
       g.imageSmoothingEnabled = true;
       g.drawImage(miniBg, 0, 0, W, H);
+      // v51: active flux vortices = pulsing red rings on the minimap
+      if (game && game.active){
+        const t = performance.now()/1000;
+        const pulse = 0.5 + 0.5*Math.sin(t*3);
+        for (const vv of game.vortices){
+          if (!vv.alive) continue;
+          const vx = (vv.x/chipUm.w) * W;
+          const vy = H - (vv.y/chipUm.h) * H;
+          g.fillStyle = 'rgba(255,80,80,'+(0.55+0.35*pulse)+')';
+          g.beginPath(); g.arc(vx, vy, 3.4+pulse, 0, Math.PI*2); g.fill();
+          g.strokeStyle = 'rgba(255,200,200,0.9)'; g.lineWidth = 0.8;
+          g.beginPath(); g.arc(vx, vy, 3.4+pulse, 0, Math.PI*2); g.stroke();
+        }
+      }
       // player position
       const px = (state.x/chipUm.w) * W;
       const py = H - (state.y/chipUm.h) * H;
-      // facing arrow (yaw=0 = +y world / up on map; map y is inverted)
       const fx = Math.sin(yaw), fy = Math.cos(yaw);
       const ax = px + fx * 7, ay = py - fy * 7;
-      g.strokeStyle = 'rgba(255,60,60,0.95)'; g.lineWidth = 1.6;
+      g.strokeStyle = 'rgba(255,255,80,0.95)'; g.lineWidth = 1.6;
       g.beginPath(); g.moveTo(px, py); g.lineTo(ax, ay); g.stroke();
-      // player dot
-      g.fillStyle = '#ff3a3a';
+      g.fillStyle = '#ffea3a';
       g.beginPath(); g.arc(px, py, 2.6, 0, Math.PI*2); g.fill();
-      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 0.8;
+      g.strokeStyle = 'rgba(0,0,0,0.85)'; g.lineWidth = 0.8;
       g.beginPath(); g.arc(px, py, 2.6, 0, Math.PI*2); g.stroke();
     }
     function paintAllMinis(){
@@ -851,13 +863,17 @@
     }
 
     function diracStr(theta, phi){
-      const c = Math.cos(theta/2), s = Math.sin(theta/2);
+      // v51: explicit normalization — cos²+sin²=1 in theory but rounding+clamps can drift
+      const t = Math.max(0, Math.min(Math.PI, theta));
+      let c = Math.cos(t/2), s = Math.sin(t/2);
+      const norm = Math.sqrt(c*c + s*s) || 1;
+      c /= norm; s /= norm;
       const fmt = (n)=> (Math.abs(n)<0.005)?'0':n.toFixed(2);
       const phase = ((phi%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
       let phaseStr;
       if (Math.abs(phase) < 0.05 || Math.abs(phase-2*Math.PI)<0.05) phaseStr='';
       else if (Math.abs(phase-Math.PI)<0.05) phaseStr='−';
-      else phaseStr = 'e<sup>i'+phase.toFixed(1)+'</sup>·';
+      else phaseStr = 'e<sup>'+phase.toFixed(1)+'i</sup>·';
       if (Math.abs(s)<0.005) return '|ψ⟩=|0⟩';
       if (Math.abs(c)<0.005) return '|ψ⟩='+phaseStr+'|1⟩';
       return '|ψ⟩='+fmt(c)+'|0⟩+'+phaseStr+fmt(s)+'|1⟩';
@@ -915,18 +931,30 @@
       function restart(){
         gameMsg.style.display='none';
         blochEl.classList.remove('lost');
+        document.getElementById('squidWarn').classList.remove('warn'); // v51: clear stale warning
         running=true; startBtn.textContent='PAUSE';
         while(vortexGroup.children.length)vortexGroup.remove(vortexGroup.children[0]);
+        // also teleport away from any SQUID we were sitting on
+        state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200;
+        targetYaw=yaw=0; targetPitch=pitch=-0.42;
         spawnVortices();
         game.active=true; game.won=false; game.lost=false;
         game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
+        gameBtn.textContent='OBSERVER MODE';
         // teleport home, but don't reset difficulty
         state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200;
         targetYaw=yaw=0; targetPitch=pitch=-0.42;
         vcSpan.textContent=game.count; document.getElementById('vcMax').textContent=game.count;
         blochEl.classList.add('on'); vortexCountEl.classList.add('on');
       }
-      document.getElementById('gameMsgClose').onclick=()=>{ gameMsg.style.display='none'; blochEl.classList.remove('on'); vortexCountEl.classList.remove('on'); while(vortexGroup.children.length)vortexGroup.remove(vortexGroup.children[0]); };
+      document.getElementById('gameMsgClose').onclick=()=>{
+        gameMsg.style.display='none';
+        blochEl.classList.remove('on','lost');
+        vortexCountEl.classList.remove('on');
+        while(vortexGroup.children.length)vortexGroup.remove(vortexGroup.children[0]);
+        document.getElementById('squidWarn').classList.remove('warn'); // v51: clear stuck warning
+        gameBtn.textContent='GAME MODE';
+      };
       document.getElementById('gameMsgRetry').onclick=restart;
       const hb=document.getElementById('gameMsgHarder');
       if (hb) hb.onclick=()=>{ game.count=Math.min(25,game.count+3); const hbtn=document.getElementById('harderBtn'); if(hbtn) hbtn.textContent='HARDER ('+game.count+')'; restart(); };
@@ -974,6 +1002,18 @@
       }
     }
 
+    // v51: tiny dim-green texture used for the "pinned" hole left behind after a vortex kill
+    function buildPinnedDotTex(){
+      const cv = document.createElement('canvas'); cv.width=cv.height=128;
+      const cg = cv.getContext('2d');
+      const grd = cg.createRadialGradient(64,64,1,64,64,40);
+      grd.addColorStop(0,'rgba(220,255,210,0.9)');
+      grd.addColorStop(0.4,'rgba(60,200,90,0.55)');
+      grd.addColorStop(1,'rgba(0,60,20,0)');
+      cg.fillStyle=grd; cg.fillRect(0,0,128,128);
+      return new THREE.CanvasTexture(cv);
+    }
+
     // v48: drop a small black "pinning hole" from in front of the photon onto the vortex,
     // then leave behind a tiny red glowing dot where the big vortex used to be.
     function dropPinningHole(v){
@@ -997,10 +1037,17 @@
         if (a<1) requestAnimationFrame(anim);
         else {
           scene.remove(box);
-          // vortex shrinks to a tiny red dot
-          v.mesh.scale.set(0.18,0.18,1);
-          v.mesh.material.opacity = 0.85;
           spawnKillBurst(v.x, v.y);
+          // v51: vortex becomes a small, dim GREEN dot (pinned hole)
+          v.mesh.material.dispose();
+          if (v.mesh.material.map) v.mesh.material.map.dispose();
+          v.mesh.material = new THREE.MeshBasicMaterial({
+            map: buildPinnedDotTex(),
+            transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0.55
+          });
+          v.mesh.scale.set(0.18,0.18,1);
+          // remove the bright red point light too
+          for (let i=v.mesh.children.length-1;i>=0;i--) v.mesh.remove(v.mesh.children[i]);
         }
       }
       anim();
@@ -1112,7 +1159,25 @@
     slowerBtn.onclick=()=>{ if(speedLevel>0)speedLevel--; refreshSpeed(); };
     fasterBtn.onclick=()=>{ if(speedLevel<SPEEDS.length-1)speedLevel++; refreshSpeed(); };
     refreshSpeed();
-    gameBtn.onclick=()=>{ tryLockLandscape(); startGame(); };
+    // v51: GAME MODE ↔ OBSERVER MODE toggle. Also hides the first-time game-mode hint forever.
+    gameBtn.onclick=()=>{
+      tryLockLandscape();
+      document.getElementById('gameHint').classList.remove('on');
+      if (game.active){
+        // turn off game → back to free exploration
+        game.active=false;
+        while(vortexGroup.children.length) vortexGroup.remove(vortexGroup.children[0]);
+        game.vortices = [];
+        blochEl.classList.remove('on','lost');
+        vortexCountEl.classList.remove('on');
+        document.getElementById('squidWarn').classList.remove('warn');
+        gameMsg.style.display='none';
+        gameBtn.textContent='GAME MODE';
+      } else {
+        startGame();
+        gameBtn.textContent='OBSERVER MODE';
+      }
+    };
     document.getElementById('harderBtn').onclick=()=>{
       game.count=Math.min(25,game.count+3);
       document.getElementById('harderBtn').textContent='HARDER ('+game.count+')';
