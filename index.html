@@ -21,16 +21,16 @@
        artificial horizon in landscape. */
     #hud{position:fixed;right:8px;bottom:1px;z-index:10;background:rgba(0,0,0,.55);padding:3px 6px;border-radius:10px;display:flex;flex-direction:column;gap:2px;align-items:center;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
     #hud .row{display:flex;gap:6px;align-items:flex-end}
-    #hud .cell{width:62px;text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif}
-    #hud .lbl{font-size:6px;opacity:.78;text-transform:uppercase;letter-spacing:.07em}
-    #hud .val{font-size:11px;font-weight:900;line-height:1.0;margin:1px 0}
-    #hud .unit{font-size:6px;opacity:.78}
-    #hud .gauge{position:relative;width:50px;height:14px;margin:2px auto 0;overflow:hidden}
-    #hud .arc{position:absolute;left:5px;top:2px;width:40px;height:20px;border:2px solid rgba(221,232,255,.28);border-bottom:0;border-radius:40px 40px 0 0}
-    #hud .needle{position:absolute;left:24px;bottom:0;width:2px;height:12px;background:#59ffc0;border-radius:3px;transform-origin:50% 100%;transform:rotate(-82deg);box-shadow:0 0 6px rgba(89,255,192,.7)}
+    #hud .cell{width:72px;text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif}
+    #hud .lbl{font-size:7px;opacity:.85;text-transform:uppercase;letter-spacing:.07em}
+    #hud .val{font-size:12px;font-weight:900;line-height:1.0;margin:1px 0}
+    #hud .unit{font-size:7px;opacity:.78}
+    #hud .gauge{position:relative;width:58px;height:16px;margin:2px auto 0;overflow:hidden}
+    #hud .arc{position:absolute;left:6px;top:2px;width:46px;height:23px;border:2px solid rgba(221,232,255,.32);border-bottom:0;border-radius:46px 46px 0 0}
+    #hud .needle{position:absolute;left:28px;bottom:0;width:2px;height:14px;background:#59ffc0;border-radius:3px;transform-origin:50% 100%;transform:rotate(-82deg);box-shadow:0 0 6px rgba(89,255,192,.7)}
     #hud .altNeedle{background:#ffd166;box-shadow:0 0 6px rgba(255,209,102,.7)}
-    #hud .map-cell{width:50px}
-    #hud .map-cell canvas{display:block;width:48px;height:48px;border-radius:4px;background:#101418;border:1px solid rgba(255,255,255,.18)}
+    #hud .map-cell{width:70px}
+    #hud .map-cell canvas{display:block;width:68px;height:68px;border-radius:5px;background:#0a0e14;border:1px solid rgba(255,255,255,.28)}
     #hud .logo-cell{width:auto;display:flex;align-items:center;justify-content:center;padding:0 4px}
     #hud .logo-cell img{height:28px;max-height:28px;width:auto;display:block;object-fit:contain}
     #hud .logo-cell img.hidden{display:none}
@@ -70,13 +70,16 @@
     #welcome .opt svg{width:38px;height:38px}
     #welcome button{margin-top:6px;background:#59ffc0;color:#02110c;border:0;border-radius:6px;padding:8px 18px;font-weight:800;font-size:14px;cursor:pointer}
     /* v49: hand-drawn "try game mode" hint pointing to the GAME MODE button */
-    #gameHint{position:fixed;z-index:20;pointer-events:none;font:700 26px 'Caveat',cursive;color:#ff7ab3;text-shadow:0 0 12px rgba(255,58,138,.6);opacity:0;transition:opacity .5s}
-    #gameHint.on{opacity:1;animation:hintBob 1s ease-in-out infinite alternate}
+    .hand-hint{position:fixed;z-index:20;pointer-events:none;width:140px;text-align:right;opacity:0;transition:opacity .5s}
+    .hand-hint.on{opacity:1;animation:hintBob 1s ease-in-out infinite alternate}
     @keyframes hintBob{from{transform:translateX(0)}to{transform:translateX(-8px)}}
-    #gameHint svg{display:block;width:120px;height:60px;margin-top:-4px}
-    #speedHint{position:fixed;z-index:20;pointer-events:none;font:700 24px 'Caveat',cursive;color:#ffd166;text-shadow:0 0 12px rgba(255,209,102,.6);opacity:0;transition:opacity .5s}
-    #speedHint.on{opacity:1;animation:hintBob 1s ease-in-out infinite alternate}
-    #speedHint svg{display:block;width:120px;height:60px;margin-top:-4px}
+    .hand-hint span{font:700 26px 'Caveat',cursive;display:block}
+    .hand-hint svg{display:block;width:140px;height:48px;margin-top:-2px}
+    #gameHint{color:#ff7ab3;text-shadow:0 0 12px rgba(255,58,138,.6)}
+    #speedHint{color:#ffd166;text-shadow:0 0 12px rgba(255,209,102,.6)}
+    /* START button blink animation */
+    button#startBtn.blink{animation:startBlink .35s ease-in-out infinite alternate}
+    @keyframes startBlink{from{transform:scale(1);box-shadow:0 0 7px rgba(89,255,192,.25)}to{transform:scale(1.35);box-shadow:0 0 22px rgba(89,255,192,.95)}}
     /* v39: force landscape — overlay covers screen if phone is in portrait. */
     #rotateOverlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(8,18,30,.96);color:#fff;align-items:center;justify-content:center;flex-direction:column;gap:14px;font:14px system-ui,sans-serif;text-align:center;padding:24px}
     @media (orientation:portrait) and (max-width:1100px){ #rotateOverlay{display:flex} }
@@ -131,18 +134,20 @@
   </div>
   <div id="status">Loading real GDS texture...</div>
   <!-- v49: hand-drawn pointer hint to GAME MODE — JS positions it next to the button -->
-  <div id="gameHint">
+  <!-- v52: hand-drawn hints. Arrow tip is at the very right edge of the SVG so it
+       lands flush against the button when the hint is right-anchored next to it. -->
+  <div id="gameHint" class="hand-hint">
     <span>try Game Mode!</span>
-    <svg viewBox="0 0 120 60" fill="none" stroke="#ff7ab3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M 8 30 C 30 20, 60 18, 92 28"/>
-      <polyline points="80,18 94,30 80,38"/>
+    <svg viewBox="0 0 140 48" fill="none" stroke="#ff7ab3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 6 24 C 30 14, 70 10, 130 22"/>
+      <polyline points="116,12 134,22 116,32"/>
     </svg>
   </div>
-  <div id="speedHint">
+  <div id="speedHint" class="hand-hint">
     <span>control speed</span>
-    <svg viewBox="0 0 120 60" fill="none" stroke="#ffd166" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M 8 30 C 30 20, 60 18, 92 28"/>
-      <polyline points="80,18 94,30 80,38"/>
+    <svg viewBox="0 0 140 48" fill="none" stroke="#ffd166" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 6 24 C 30 14, 70 10, 130 22"/>
+      <polyline points="116,12 134,22 116,32"/>
     </svg>
   </div>
 
@@ -541,14 +546,15 @@
     (function drawMiniBg(){
       const g = miniBg.getContext('2d');
       g.clearRect(0,0,120,120);
-      // chip background = dark Si tone
-      g.fillStyle = '#1a1d24';
+      // v52: high-contrast minimap
+      // bright Nb sheet fill
+      g.fillStyle = '#d8e2ee';
       g.fillRect(0,0,120,120);
-      // bright Nb outline (so the minimap matches the new Nb/Si contrast)
-      g.strokeStyle = '#cfd6e0'; g.lineWidth = 1;
+      // crisp border
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1.5;
       g.strokeRect(0.5, 0.5, 119, 119);
-      // etched openings = darker patches (exposed Si)
-      g.fillStyle = 'rgba(60,75,95,0.85)';
+      // etched openings = dark Si
+      g.fillStyle = 'rgba(20,28,40,0.95)';
       for (const p of trench134){
         if (!p || p.length<3) continue;
         g.beginPath();
@@ -559,12 +565,14 @@
         }
         g.closePath(); g.fill();
       }
-      // qubit centers — small bright dots
+      // qubit centers — bigger, glowing blue dots
       for (const [cx,cy] of qubitCenters){
         const x = cx/chipUm.w * 120;
         const y = 120 - cy/chipUm.h * 120;
-        g.fillStyle = '#59ffc0';
-        g.beginPath(); g.arc(x,y,1.6,0,Math.PI*2); g.fill();
+        g.fillStyle = '#1e88ff';
+        g.beginPath(); g.arc(x,y,2.4,0,Math.PI*2); g.fill();
+        g.strokeStyle = '#ffffff'; g.lineWidth = 0.6;
+        g.beginPath(); g.arc(x,y,2.4,0,Math.PI*2); g.stroke();
       }
     })();
     const miniMainCanvas = document.getElementById('miniMap');
@@ -593,12 +601,12 @@
       const py = H - (state.y/chipUm.h) * H;
       const fx = Math.sin(yaw), fy = Math.cos(yaw);
       const ax = px + fx * 7, ay = py - fy * 7;
-      g.strokeStyle = 'rgba(255,255,80,0.95)'; g.lineWidth = 1.6;
+      g.strokeStyle = '#ff00aa'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(px, py); g.lineTo(ax, ay); g.stroke();
-      g.fillStyle = '#ffea3a';
-      g.beginPath(); g.arc(px, py, 2.6, 0, Math.PI*2); g.fill();
-      g.strokeStyle = 'rgba(0,0,0,0.85)'; g.lineWidth = 0.8;
-      g.beginPath(); g.arc(px, py, 2.6, 0, Math.PI*2); g.stroke();
+      g.fillStyle = '#ff00aa';
+      g.beginPath(); g.arc(px, py, 3, 0, Math.PI*2); g.fill();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1;
+      g.beginPath(); g.arc(px, py, 3, 0, Math.PI*2); g.stroke();
     }
     function paintAllMinis(){
       paintMini(miniMainCanvas);
@@ -870,10 +878,11 @@
       c /= norm; s /= norm;
       const fmt = (n)=> (Math.abs(n)<0.005)?'0':n.toFixed(2);
       const phase = ((phi%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
+      const xPi = phase/Math.PI; // 0..2
       let phaseStr;
-      if (Math.abs(phase) < 0.05 || Math.abs(phase-2*Math.PI)<0.05) phaseStr='';
-      else if (Math.abs(phase-Math.PI)<0.05) phaseStr='−';
-      else phaseStr = 'e<sup>'+phase.toFixed(1)+'i</sup>·';
+      if (xPi < 0.02 || xPi > 1.98) phaseStr='';
+      else if (Math.abs(xPi-1) < 0.02) phaseStr='−';
+      else phaseStr = 'e<sup>'+xPi.toFixed(2)+'πi</sup>·';
       if (Math.abs(s)<0.005) return '|ψ⟩=|0⟩';
       if (Math.abs(c)<0.005) return '|ψ⟩='+phaseStr+'|1⟩';
       return '|ψ⟩='+fmt(c)+'|0⟩+'+phaseStr+fmt(s)+'|1⟩';
@@ -1103,15 +1112,8 @@
         game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
         blochEl.classList.add('on'); vortexCountEl.classList.add('on');
         vcSpan.textContent=game.count; document.getElementById('vcMax').textContent=game.count;
-        running=true; startBtn.textContent='PAUSE';
-        // v50: "control speed" hint above SLOWER/FASTER for 3 s
-        const sh = document.getElementById('speedHint');
-        const sb = document.getElementById('slowerBtn');
-        const r = sb.getBoundingClientRect();
-        sh.style.right = (window.innerWidth - r.left + 10)+'px';
-        sh.style.top   = (r.top + r.height/2 - 30)+'px';
-        sh.classList.add('on');
-        setTimeout(()=>sh.classList.remove('on'), 3000);
+        running=true; startBtn.textContent='PAUSE'; cancelStartBlink();
+        showHint('speedHint','slowerBtn',3000);
       };
     }
 
@@ -1155,7 +1157,38 @@
         if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
       }catch(e){}
     }
-    startBtn.onclick=()=>{ tryLockLandscape(); running=!running; startBtn.textContent=running?'PAUSE':'START'; };
+    // v52: helper to show a hand-hint next to a target button, robust positioning
+    function showHint(hintId, btnId, durMs){
+      requestAnimationFrame(()=>{
+        const hint = document.getElementById(hintId);
+        const btn  = document.getElementById(btnId);
+        if (!hint||!btn) return;
+        const r = btn.getBoundingClientRect();
+        // anchor hint's RIGHT edge a few px to the left of the button so the arrow tip
+        // (at the right edge of the SVG) lands flush against the button.
+        hint.style.right = (window.innerWidth - r.left + 4)+'px';
+        hint.style.top   = (r.top + r.height/2 - 30)+'px';
+        hint.classList.add('on');
+        setTimeout(()=>hint.classList.remove('on'), durMs);
+      });
+    }
+    // v52: blink the START button if user idles 4 s after closing an info popup
+    let startBlinkTimer=null, startBlinkStop=null;
+    function armStartBlink(){
+      clearTimeout(startBlinkTimer); clearTimeout(startBlinkStop);
+      startBtn.classList.remove('blink');
+      startBlinkTimer = setTimeout(()=>{
+        if (!running){
+          startBtn.classList.add('blink');
+          startBlinkStop = setTimeout(()=>startBtn.classList.remove('blink'), 10000);
+        }
+      }, 4000);
+    }
+    function cancelStartBlink(){
+      clearTimeout(startBlinkTimer); clearTimeout(startBlinkStop);
+      startBtn.classList.remove('blink');
+    }
+    startBtn.onclick=()=>{ tryLockLandscape(); cancelStartBlink(); running=!running; startBtn.textContent=running?'PAUSE':'START'; };
     slowerBtn.onclick=()=>{ if(speedLevel>0)speedLevel--; refreshSpeed(); };
     fasterBtn.onclick=()=>{ if(speedLevel<SPEEDS.length-1)speedLevel++; refreshSpeed(); };
     refreshSpeed();
@@ -1201,13 +1234,8 @@
     };
     document.getElementById('welcomeBtn').onclick=()=>{
       document.getElementById('welcome').style.display='none';
-      const hint = document.getElementById('gameHint');
-      const gb = document.getElementById('gameBtn');
-      const r = gb.getBoundingClientRect();
-      hint.style.right = (window.innerWidth - r.left + 10)+'px';
-      hint.style.top   = (r.top + r.height/2 - 30)+'px';
-      hint.classList.add('on');
-      setTimeout(()=>hint.classList.remove('on'), 4500);
+      showHint('gameHint','gameBtn',4500);
+      armStartBlink();
     };
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
