@@ -70,11 +70,11 @@
     #welcome .opt svg{width:38px;height:38px}
     #welcome button{margin-top:6px;background:#59ffc0;color:#02110c;border:0;border-radius:6px;padding:8px 18px;font-weight:800;font-size:14px;cursor:pointer}
     /* v49: hand-drawn "try game mode" hint pointing to the GAME MODE button */
-    .hand-hint{position:fixed;z-index:20;pointer-events:none;width:140px;text-align:right;opacity:0;transition:opacity .5s}
+    .hand-hint{position:fixed;z-index:20;pointer-events:none;width:150px;text-align:right;opacity:0;transition:opacity .5s;left:-9999px;top:-9999px}
     .hand-hint.on{opacity:1;animation:hintBob 1s ease-in-out infinite alternate}
     @keyframes hintBob{from{transform:translateX(0)}to{transform:translateX(-8px)}}
-    .hand-hint span{font:700 26px 'Caveat',cursive;display:block}
-    .hand-hint svg{display:block;width:140px;height:48px;margin-top:-2px}
+    .hand-hint span{font:700 22px 'Caveat',cursive;display:block;line-height:1;white-space:nowrap;text-align:right}
+    .hand-hint svg{display:block;width:150px;height:46px;margin-top:-2px}
     #gameHint{color:#ff7ab3;text-shadow:0 0 12px rgba(255,58,138,.6)}
     #speedHint{color:#ffd166;text-shadow:0 0 12px rgba(255,209,102,.6)}
     /* START button blink animation */
@@ -138,9 +138,9 @@
        lands flush against the button when the hint is right-anchored next to it. -->
   <div id="gameHint" class="hand-hint">
     <span>try Game Mode!</span>
-    <svg viewBox="0 0 140 48" fill="none" stroke="#ff7ab3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M 6 24 C 30 14, 70 10, 130 22"/>
-      <polyline points="116,12 134,22 116,32"/>
+    <svg viewBox="0 0 150 46" fill="none" stroke="#ff7ab3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 6 23 C 30 12, 70 8, 140 21"/>
+      <polyline points="126,12 146,22 126,32"/>
     </svg>
   </div>
   <div id="speedHint" class="hand-hint">
@@ -1157,20 +1157,26 @@
         if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
       }catch(e){}
     }
-    // v52: helper to show a hand-hint next to a target button, robust positioning
+    // v54: simpler robust positioning. Re-measure on every frame for the first 200 ms
+    // and adjust — this catches the case where layout settles late after the welcome
+    // panel disappears. Hint is left-anchored.
     function showHint(hintId, btnId, durMs){
-      requestAnimationFrame(()=>{
-        const hint = document.getElementById(hintId);
-        const btn  = document.getElementById(btnId);
-        if (!hint||!btn) return;
+      const hint = document.getElementById(hintId);
+      const btn  = document.getElementById(btnId);
+      if (!hint||!btn) return;
+      hint.classList.add('on');
+      let frames = 0;
+      function place(){
         const r = btn.getBoundingClientRect();
-        // anchor hint's RIGHT edge a few px to the left of the button so the arrow tip
-        // (at the right edge of the SVG) lands flush against the button.
-        hint.style.right = (window.innerWidth - r.left + 4)+'px';
-        hint.style.top   = (r.top + r.height/2 - 30)+'px';
-        hint.classList.add('on');
-        setTimeout(()=>hint.classList.remove('on'), durMs);
-      });
+        if (r.width > 0){
+          hint.style.left  = Math.max(2, r.left - 152) + 'px';
+          hint.style.right = 'auto';
+          hint.style.top   = (r.top + r.height/2 - 36) + 'px';
+        }
+        if (frames++ < 12) requestAnimationFrame(place);
+      }
+      place();
+      setTimeout(()=>hint.classList.remove('on'), durMs);
     }
     // v52: blink the START button if user idles 4 s after closing an info popup
     let startBlinkTimer=null, startBlinkStop=null;
