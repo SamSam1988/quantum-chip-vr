@@ -8,7 +8,7 @@
   <style>
     html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
     /* v35: ordinary view — buttons stacked RIGHT, just above dashboard, 30% larger, in pairs */
-    #ui{position:fixed;right:8px;bottom:120px;z-index:10;display:flex;flex-direction:column;gap:3px;max-width:none;align-items:flex-end}
+    #ui{position:fixed;right:8px;bottom:8px;z-index:10;display:flex;flex-direction:column;gap:3px;max-width:none;align-items:flex-end}
     #ui .ui-row{display:flex;gap:3px;justify-content:flex-end}
     button{border:0;border-radius:5px;padding:5px 8px;font-weight:800;font-size:9px;background:#59ffc0;color:#02110c;box-shadow:0 0 7px rgba(89,255,192,.25);cursor:pointer}
     button.secondary{background:#ffe16b;color:#100d00}
@@ -19,8 +19,9 @@
     /* v27: HUD restacked vertically — instrument row (map + speed + altitude) on top,
        Qarakal logo below. Narrower footprint so it no longer overlaps the bottom-centre
        artificial horizon in landscape. */
-    #hud{position:fixed;right:8px;bottom:1px;z-index:10;background:rgba(0,0,0,.55);padding:3px 6px;border-radius:10px;display:flex;flex-direction:column;gap:2px;align-items:center;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
-    #hud .row{display:flex;gap:6px;align-items:flex-end}
+    /* v55: dashboard moved to bottom-LEFT, vertical: map → speed → alt → logo */
+    #hud{position:fixed;left:8px;bottom:6px;z-index:10;background:rgba(0,0,0,.55);padding:5px;border-radius:10px;display:flex;flex-direction:column;gap:4px;align-items:center;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
+    #hud .row{display:flex;flex-direction:column;gap:4px;align-items:center}
     #hud .cell{width:72px;text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif}
     #hud .lbl{font-size:7px;opacity:.85;text-transform:uppercase;letter-spacing:.07em}
     #hud .val{font-size:12px;font-weight:900;line-height:1.0;margin:1px 0}
@@ -42,7 +43,8 @@
     #gameMsg h2{margin:0 0 8px;font-size:18px;color:#ff7ab3}
     #gameMsg button{margin-top:14px;background:#59ffc0;color:#02110c;border:0;border-radius:6px;padding:8px 14px;font-weight:800;font-size:13px;cursor:pointer}
     /* Bloch sphere panel — left side, used in game mode only */
-    #bloch{position:fixed;left:8px;top:50%;transform:translateY(-50%);z-index:10;background:radial-gradient(circle at 30% 25%,rgba(40,60,100,.85),rgba(8,14,28,.85));padding:6px;border-radius:12px;border:1px solid rgba(150,180,255,.5);box-shadow:0 0 18px rgba(80,130,210,.4),inset 0 0 18px rgba(80,130,210,.15);display:none;font:10px system-ui,sans-serif;color:#fff;text-align:center;width:120px;box-sizing:content-box}
+    /* v55: bloch sphere top-right (dashboard owns the left column) */
+    #bloch{position:fixed;right:120px;bottom:8px;z-index:10;background:radial-gradient(circle at 30% 25%,rgba(40,60,100,.85),rgba(8,14,28,.85));padding:6px;border-radius:12px;border:1px solid rgba(150,180,255,.5);box-shadow:0 0 18px rgba(80,130,210,.4),inset 0 0 18px rgba(80,130,210,.15);display:none;font:10px system-ui,sans-serif;color:#fff;text-align:center;width:120px;box-sizing:content-box}
     #bloch.on{display:block}
     #bloch.lost{border-color:#ff3a3a;box-shadow:0 0 30px rgba(255,40,40,.85);animation:lostBlink .4s steps(2) infinite;background:radial-gradient(circle at 30% 25%,rgba(160,30,30,.95),rgba(40,0,0,.95))}
     @keyframes lostBlink{0%{filter:brightness(1)}100%{filter:brightness(1.6)}}
@@ -103,8 +105,17 @@
       <div>Fly over Qarakal Quantum's superconducting qubit chip.</div>
       <div class="row">
         <div class="opt">
-          <svg viewBox="0 0 40 40" fill="none" stroke="#59ffc0" stroke-width="2.5" stroke-linecap="round"><circle cx="20" cy="20" r="6" fill="#59ffc0"/><line x1="20" y1="6" x2="20" y2="2"/><line x1="20" y1="38" x2="20" y2="34"/><line x1="6" y1="20" x2="2" y2="20"/><line x1="38" y1="20" x2="34" y2="20"/></svg>
-          <div><b>Touch & drag</b><br/>swipe to look around</div>
+          <svg viewBox="0 0 60 40" fill="none" stroke="#59ffc0" stroke-width="2.5" stroke-linecap="round">
+            <line x1="6" y1="20" x2="54" y2="20" stroke-width="1" opacity=".35"/>
+            <line x1="6" y1="20" x2="14" y2="20" stroke-width="1.5"/>
+            <line x1="46" y1="20" x2="54" y2="20" stroke-width="1.5"/>
+            <g>
+              <circle cx="30" cy="20" r="6" fill="#59ffc0"/>
+              <line x1="30" y1="12" x2="30" y2="6"/>
+              <animateTransform attributeName="transform" type="translate" values="-16 0; 16 0; -16 0" dur="1.8s" repeatCount="indefinite"/>
+            </g>
+          </svg>
+          <div><b>Touch &amp; drag</b><br/>swipe to choose your<br/>look &amp; flight direction</div>
         </div>
         <div style="opacity:.5">OR</div>
         <div class="opt">
@@ -125,7 +136,6 @@
     </div>
     <div id="speedReadout" style="font:bold 10px system-ui;color:#ff7a3d;text-align:right;padding-right:2px">100 µm/s</div>
     <button id="gameBtn">GAME MODE</button>
-    <button class="dark" id="harderBtn">HARDER +3</button>
     <div class="ui-row">
       <button class="dark" id="resetBtn">RESET</button>
       <button class="dark" id="fullBtn">FULL SCREEN</button>
@@ -145,9 +155,9 @@
   </div>
   <div id="speedHint" class="hand-hint">
     <span>control speed</span>
-    <svg viewBox="0 0 140 48" fill="none" stroke="#ffd166" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M 6 24 C 30 14, 70 10, 130 22"/>
-      <polyline points="116,12 134,22 116,32"/>
+    <svg viewBox="0 0 150 46" fill="none" stroke="#ffd166" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 6 23 C 30 12, 70 8, 140 21"/>
+      <polyline points="126,12 146,22 126,32"/>
     </svg>
   </div>
 
@@ -308,8 +318,8 @@
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.75)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
     // v22: a touch more light. Nb is now significantly brighter (see material below), so
     // we keep ambient moderate so the dark Si still reads as dark.
-    scene.add(new THREE.HemisphereLight(0xffffff,0x556677,1.85));
-    const dirLight=new THREE.DirectionalLight(0xffffff,1.75); dirLight.position.set(2,5,3); scene.add(dirLight);
+    // v55: remove the directional "sun" hotspot. Hemisphere light alone — flat, even.
+    scene.add(new THREE.HemisphereLight(0xffffff,0x556677,2.6));
     scene.add(new THREE.AmbientLight(0xb0c4dd, 0.28));
     const siThicknessUnit=500/UM_PER_UNIT;
     const baseGeo=new THREE.BoxGeometry(chipW,chipH,siThicknessUnit);
@@ -638,6 +648,7 @@
     let lastVibrate = 0;
     function pulseVibrate(t){
       if (!navigator.vibrate) return;
+      if (!game.active || !running) return; // v55: vibrate only during active game in play
       let minD = Infinity;
       for (const [cx,cy] of qubitCenters){
         const dx = state.x - cx, dy = state.y - cy;
@@ -758,7 +769,7 @@
       }
       pulseVibrate(t);
       const v=SPEEDS[speedLevel];
-      speedValue.textContent=v.toFixed(1);
+      speedValue.textContent=(running?v:0).toFixed(1); // v55: true airspeed — 0 when paused/before start
       const maxSpeed=1000;
       const angle=-82+164*Math.max(0,Math.min(1,v/maxSpeed));
       needle.style.transform=`rotate(${angle}deg)`;
@@ -871,11 +882,15 @@
     }
 
     function diracStr(theta, phi){
-      // v51: explicit normalization — cos²+sin²=1 in theory but rounding+clamps can drift
+      // v55: round c to 2 dec then derive s from the normalization constraint
+      // so displayed amplitudes always satisfy c²+s²=1 to 2-decimal precision.
       const t = Math.max(0, Math.min(Math.PI, theta));
       let c = Math.cos(t/2), s = Math.sin(t/2);
       const norm = Math.sqrt(c*c + s*s) || 1;
       c /= norm; s /= norm;
+      const cR = Math.round(c*100)/100;
+      const sR = Math.round(Math.sqrt(Math.max(0, 1 - cR*cR))*100)/100;
+      c = cR; s = sR;
       const fmt = (n)=> (Math.abs(n)<0.005)?'0':n.toFixed(2);
       const phase = ((phi%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
       const xPi = phase/Math.PI; // 0..2
@@ -927,7 +942,7 @@
       }
       const title = won ? 'VICTORY' : 'GAME OVER';
       const colour = won ? '#59ffc0' : '#ff5577';
-      const harderBtn = won ? '<button id="gameMsgHarder" style="background:#ff7a3d;color:#fff">TRY AGAIN HARDER (+3)</button>' : '';
+      const harderBtn = '';
       const score = won ? Math.round(Math.sin(game.theta)*100) : 0;
       const scoreHtml = won ? '<div style="margin-top:8px;font:bold 22px system-ui;color:#ffd166">SCORE: '+score+'% coherence</div>' : '';
       gameMsg.innerHTML='<h2 style="color:'+colour+'">'+title+'</h2>'
@@ -966,7 +981,6 @@
       };
       document.getElementById('gameMsgRetry').onclick=restart;
       const hb=document.getElementById('gameMsgHarder');
-      if (hb) hb.onclick=()=>{ game.count=Math.min(25,game.count+3); const hbtn=document.getElementById('harderBtn'); if(hbtn) hbtn.textContent='HARDER ('+game.count+')'; restart(); };
     }
 
     function gameStep(dt){
@@ -1147,7 +1161,6 @@
       targetYaw=yaw=0; targetPitch=pitch=-0.42;
       initialOri=currentOri;
       game.count=5;
-      const hb=document.getElementById('harderBtn'); if(hb) hb.textContent='HARDER +3';
       blochEl.classList.remove('lost');
       if (navigator.vibrate) try{ navigator.vibrate(30);}catch(e){}
     }
@@ -1178,23 +1191,21 @@
       place();
       setTimeout(()=>hint.classList.remove('on'), durMs);
     }
-    // v52: blink the START button if user idles 4 s after closing an info popup
-    let startBlinkTimer=null, startBlinkStop=null;
+    // v55: START blinks until the user first taps it (no 10-s cutoff)
+    let startBlinkTimer=null, hasEverStarted=false;
     function armStartBlink(){
-      clearTimeout(startBlinkTimer); clearTimeout(startBlinkStop);
+      clearTimeout(startBlinkTimer);
+      if (hasEverStarted) return;
       startBtn.classList.remove('blink');
       startBlinkTimer = setTimeout(()=>{
-        if (!running){
-          startBtn.classList.add('blink');
-          startBlinkStop = setTimeout(()=>startBtn.classList.remove('blink'), 10000);
-        }
+        if (!hasEverStarted) startBtn.classList.add('blink');
       }, 4000);
     }
     function cancelStartBlink(){
-      clearTimeout(startBlinkTimer); clearTimeout(startBlinkStop);
+      clearTimeout(startBlinkTimer);
       startBtn.classList.remove('blink');
     }
-    startBtn.onclick=()=>{ tryLockLandscape(); cancelStartBlink(); running=!running; startBtn.textContent=running?'PAUSE':'START'; };
+    startBtn.onclick=()=>{ tryLockLandscape(); hasEverStarted=true; cancelStartBlink(); running=!running; startBtn.textContent=running?'PAUSE':'START'; };
     slowerBtn.onclick=()=>{ if(speedLevel>0)speedLevel--; refreshSpeed(); };
     fasterBtn.onclick=()=>{ if(speedLevel<SPEEDS.length-1)speedLevel++; refreshSpeed(); };
     refreshSpeed();
@@ -1215,27 +1226,6 @@
       } else {
         startGame();
         gameBtn.textContent='OBSERVER MODE';
-      }
-    };
-    document.getElementById('harderBtn').onclick=()=>{
-      game.count=Math.min(25,game.count+3);
-      document.getElementById('harderBtn').textContent='HARDER ('+game.count+')';
-      if (game.active){
-        for (let i=0;i<3;i++){
-          const qi = Math.floor(Math.random()*qubitCenters.length);
-          const [cx,cy] = qubitCenters[qi];
-          const ang = Math.random()*Math.PI*2;
-          const r = 300 + Math.random()*1200;
-          const vx = cx + Math.cos(ang)*r;
-          const vy = cy + Math.sin(ang)*r;
-          const mesh = buildVortexMesh();
-          mesh.position.set((vx-chipUm.w/2)/UM_PER_UNIT,(vy-chipUm.h/2)/UM_PER_UNIT,(NB_THICKNESS_UM+8)/UM_PER_UNIT);
-          mesh.userData.spinPhase = Math.random()*Math.PI*2;
-          vortexGroup.add(mesh);
-          game.vortices.push({x:vx,y:vy,mesh,alive:true});
-        }
-        vcSpan.textContent = game.vortices.filter(g=>g.alive).length;
-        document.getElementById('vcMax').textContent = game.count;
       }
     };
     document.getElementById('welcomeBtn').onclick=()=>{
