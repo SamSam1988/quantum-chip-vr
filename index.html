@@ -65,6 +65,9 @@
     @keyframes warnBlink{0%{opacity:.6}100%{opacity:1}}
     #killToast{position:fixed;left:50%;top:35%;transform:translate(-50%,-50%) scale(0.3);z-index:15;color:#fff;font:900 34px system-ui,sans-serif;text-shadow:0 0 22px #ffea3a,0 0 36px #ff7a3a,0 0 60px #ff3030;opacity:0;pointer-events:none;transition:opacity .45s ease-out,transform .55s cubic-bezier(.2,1.6,.4,1);white-space:nowrap}
     #killToast.show{opacity:1;transform:translate(-50%,-50%) scale(1.1)}
+    /* v57: "too high" warning when XY-close to a vortex but Z too far */
+    #tooHighMsg{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%);z-index:14;color:#ffd166;font:bold 22px system-ui,sans-serif;opacity:0;pointer-events:none;transition:opacity .25s;text-shadow:0 0 14px rgba(255,209,102,.85),0 0 24px rgba(255,100,30,.6);white-space:nowrap;letter-spacing:.04em}
+    #tooHighMsg.show{opacity:1}
     #welcome{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.86);display:flex;align-items:center;justify-content:center;font:14px system-ui,sans-serif;color:#fff;padding:18px}
     #welcome .box{background:rgba(20,30,50,.95);border:2px solid #59ffc0;border-radius:14px;padding:18px 22px;max-width:480px;text-align:center;box-shadow:0 0 28px rgba(89,255,192,.4)}
     #welcome h2{margin:0 0 6px;color:#59ffc0}
@@ -235,6 +238,7 @@
   <div id="squidWarn"></div>
   <div id="squidWarnTxt">⚠ SQUID PROXIMITY ⚠</div>
   <div id="killToast">+1  ★  VORTEX KILLED!</div>
+  <div id="tooHighMsg">↓ TOO HIGH — DESCEND TO REACH IT ↓</div>
   <div id="center">
     <svg viewBox="-50 -50 100 100" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -869,15 +873,35 @@
       // clear any prior
       while (vortexGroup.children.length) vortexGroup.remove(vortexGroup.children[0]);
       game.vortices = [];
-      // v45: spawn game.count vortices; each picks a random qubit (with replacement so we can exceed 8)
+      // v57: spawn vortices with a safety check — reject any spawn within 500 µm of ANY
+      // SQUID so the player is never forced to risk a death-radius approach.
       const N = game.count;
+      const MIN_FROM_SQUID = 500;
+      function clearOfSquids(vx, vy){
+        for (const [qx,qy] of qubitCenters){
+          if (Math.hypot(vx-qx, vy-qy) < MIN_FROM_SQUID) return false;
+        }
+        return true;
+      }
       for (let i=0;i<N;i++){
-        const qi = Math.floor(Math.random()*qubitCenters.length);
-        const [cx,cy] = qubitCenters[qi];
-        const ang = Math.random()*Math.PI*2;
-        const r = 300 + Math.random()*1200; // v45: 300–1500 µm from SQUID
-        const vx = cx + Math.cos(ang)*r;
-        const vy = cy + Math.sin(ang)*r;
+        let vx, vy, ok=false;
+        for (let attempt=0; attempt<25 && !ok; attempt++){
+          const qi = Math.floor(Math.random()*qubitCenters.length);
+          const [cx,cy] = qubitCenters[qi];
+          const ang = Math.random()*Math.PI*2;
+          const r = MIN_FROM_SQUID + Math.random()*1200; // 500–1700 µm from chosen SQUID
+          vx = cx + Math.cos(ang)*r;
+          vy = cy + Math.sin(ang)*r;
+          // keep on chip
+          if (vx<300 || vx>chipUm.w-300 || vy<300 || vy>chipUm.h-300) continue;
+          if (clearOfSquids(vx, vy)) ok = true;
+        }
+        if (!ok){
+          // ultra-fallback: place at chip centre, clearOfSquids almost always true there
+          vx = chipUm.w/2; vy = chipUm.h/2;
+        }
+        const cx=vx, cy=vy; // keep variable names below working
+        void cx; void cy;
         const mesh = buildVortexMesh();
         mesh.position.set((vx-chipUm.w/2)/UM_PER_UNIT,(vy-chipUm.h/2)/UM_PER_UNIT, (NB_THICKNESS_UM+8)/UM_PER_UNIT);
         mesh.userData.spinPhase = i*0.7;
@@ -1000,18 +1024,25 @@
       if (!game.active) return;
       updateBloch(tt, dt);
       // collisions — passing OVER vortex at z<=200 µm = kill it. Passing within 100 µm of SQUID = lose.
+      let tooHigh = false;
       for (const v of game.vortices){
         if (!v.alive) continue;
-        const d3 = Math.hypot(state.x - v.x, state.y - v.y, state.z);
+        const dxy = Math.hypot(state.x - v.x, state.y - v.y);
+        const d3  = Math.hypot(dxy, state.z);
         if (d3 < 300){
           v.alive = false;
-          dropPinningHole(v); // v48: black box flies from photon to vortex, vortex shrinks to a dot
+          dropPinningHole(v);
           if (navigator.vibrate) try{ navigator.vibrate([20,30,80]); }catch(e){}
           const left = game.vortices.filter(g=>g.alive).length;
           vcSpan.textContent = left;
           if (left===0) endGame(true);
+        } else if (dxy < 250 && state.z > 200){
+          // v57: XY-close but too high to make the 300 µm 3D ball
+          tooHigh = true;
         }
       }
+      const tooHighEl = document.getElementById('tooHighMsg');
+      if (tooHigh) tooHighEl.classList.add('show'); else tooHighEl.classList.remove('show');
       // SQUID proximity: warn at <250 µm (3D), die at <100 µm
       let minSquid = Infinity;
       for (const [cx,cy] of qubitCenters){
@@ -1179,6 +1210,15 @@
       initialOri=currentOri;
       game.count=5;
       blochEl.classList.remove('lost');
+      document.getElementById('squidWarn').classList.remove('warn');
+      // v57: full game reset if active — respawn original 5 vortices, reset coherence
+      if (game.active){
+        while(vortexGroup.children.length) vortexGroup.remove(vortexGroup.children[0]);
+        spawnVortices();
+        game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
+        vcSpan.textContent=game.count;
+        document.getElementById('vcMax').textContent=game.count;
+      }
       if (navigator.vibrate) try{ navigator.vibrate(30);}catch(e){}
     }
     async function tryLockLandscape(){
@@ -1226,12 +1266,10 @@
     slowerBtn.onclick=()=>{ if(speedLevel>0)speedLevel--; refreshSpeed(); };
     fasterBtn.onclick=()=>{ if(speedLevel<SPEEDS.length-1)speedLevel++; refreshSpeed(); };
     refreshSpeed();
-    // v51: GAME MODE ↔ OBSERVER MODE toggle. Also hides the first-time game-mode hint forever.
     gameBtn.onclick=()=>{
       tryLockLandscape();
       document.getElementById('gameHint').classList.remove('on');
       if (game.active){
-        // turn off game → back to free exploration
         game.active=false;
         while(vortexGroup.children.length) vortexGroup.remove(vortexGroup.children[0]);
         game.vortices = [];
