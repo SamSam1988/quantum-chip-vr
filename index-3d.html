@@ -1290,6 +1290,42 @@
     document.getElementById('resetBtn').onclick=()=>{ doReset(); };
     document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
     motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); } else { await enablePhoneMotion(true); } };
+
+    // ===== 3D-branch: cardboard button + live calibration =====
+    const cbBtn = document.getElementById('cbBtn');
+    const cbCalib = document.getElementById('cbCalib');
+    const cIPD = document.getElementById('cIPD'), cIPDv = document.getElementById('cIPDv');
+    const cFOC = document.getElementById('cFOC'), cFOCv = document.getElementById('cFOCv');
+    const cFOV = document.getElementById('cFOV'), cFOVv = document.getElementById('cFOVv');
+    function syncCalibLabels(){
+      cIPDv.textContent = cbCfg.eyeSep.toFixed(2)+'mm';
+      cFOCv.textContent = cbCfg.focus.toFixed(1);
+      cFOVv.textContent = cbCfg.fov+'°';
+    }
+    cIPD.oninput = ()=>{ cbCfg.eyeSep = +cIPD.value; syncCalibLabels(); };
+    cFOC.oninput = ()=>{ cbCfg.focus  = +cFOC.value; syncCalibLabels(); };
+    cFOV.oninput = ()=>{ cbCfg.fov    = +cFOV.value; syncCalibLabels(); };
+    syncCalibLabels();
+    let cbLastTap = 0;
+    renderer.domElement.addEventListener('touchstart', ()=>{
+      if (!cardboard) return;
+      const t = performance.now();
+      if (t - cbLastTap < 400) return;
+      cbLastTap = t;
+      doReset();
+    }, {passive:true});
+    cbBtn.onclick = async ()=>{
+      cardboard = !cardboard;
+      cbBtn.textContent = cardboard ? 'EXIT 3D' : '3D / CARDBOARD';
+      cbCalib.style.display = cardboard ? 'flex' : 'none';
+      if (cardboard){
+        try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch(e){}
+        try { await tryLockLandscape(); } catch(e){}
+        try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch(e){}
+        if (!motion) try { await enablePhoneMotion(false); } catch(e){}
+        if (!running){ running = true; startBtn.textContent = 'PAUSE'; }
+      }
+    };
     addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
     refreshUiVisibility();
   })();
