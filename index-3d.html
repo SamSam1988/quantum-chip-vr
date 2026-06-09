@@ -1,0 +1,1298 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+  <title>Quantum Chip Photon VR v29 (off-axis StereoCamera, real VR)</title>
+  <style>
+    html,body{margin:0;overflow:hidden;background:#0c1622;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
+    /* v35: ordinary view — buttons stacked RIGHT, just above dashboard, 30% larger, in pairs */
+    #ui{position:fixed;right:8px;bottom:8px;z-index:10;display:flex;flex-direction:column;gap:3px;max-width:none;align-items:flex-end}
+    #ui .ui-row{display:flex;gap:3px;justify-content:flex-end}
+    button{border:0;border-radius:5px;padding:5px 8px;font-weight:800;font-size:9px;background:#59ffc0;color:#02110c;box-shadow:0 0 7px rgba(89,255,192,.25);cursor:pointer}
+    button.secondary{background:#ffe16b;color:#100d00}
+    button.dark{background:#dde8ff;color:#06101f}
+    button.boost{background:#ff7a3d;color:#1b0a00;box-shadow:0 0 12px rgba(255,122,61,.40)}
+    button.boost.active{background:#ff3d3d;color:#fff;box-shadow:0 0 16px rgba(255,61,61,.7)}
+
+    /* v27: HUD restacked vertically — instrument row (map + speed + altitude) on top,
+       Qarakal logo below. Narrower footprint so it no longer overlaps the bottom-centre
+       artificial horizon in landscape. */
+    /* v56: dashboard bottom-LEFT, two columns: [clocks-row + logo] | [map] */
+    #hud{position:fixed;left:8px;bottom:6px;z-index:10;background:rgba(0,0,0,.55);padding:5px 7px;border-radius:10px;display:flex;flex-direction:row;gap:7px;align-items:flex-end;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 12px rgba(89,255,192,.12)}
+    #hud .left-col{display:flex;flex-direction:column;gap:4px;align-items:center}
+    #hud .row{display:flex;flex-direction:row;gap:5px;align-items:flex-end}
+    #hud .cell{width:52px;text-align:center;color:#fff;font-family:system-ui,-apple-system,sans-serif}
+    #hud .lbl{font-size:6px;opacity:.85;text-transform:uppercase;letter-spacing:.07em}
+    #hud .val{font-size:10px;font-weight:900;line-height:1.0;margin:1px 0}
+    #hud .unit{font-size:6px;opacity:.78}
+    #hud .gauge{position:relative;width:46px;height:13px;margin:2px auto 0;overflow:hidden}
+    #hud .arc{position:absolute;left:5px;top:2px;width:36px;height:18px;border:2px solid rgba(221,232,255,.32);border-bottom:0;border-radius:36px 36px 0 0}
+    #hud .needle{position:absolute;left:22px;bottom:0;width:2px;height:11px;background:#59ffc0;border-radius:3px;transform-origin:50% 100%;transform:rotate(-82deg);box-shadow:0 0 6px rgba(89,255,192,.7)}
+    #hud .altNeedle{background:#ffd166;box-shadow:0 0 6px rgba(255,209,102,.7)}
+    #hud .map-cell{width:80px}
+    #hud .map-cell canvas{display:block;width:80px;height:80px;border-radius:5px;background:#0a0e14;border:1px solid rgba(255,255,255,.28)}
+    #hud .logo-cell{width:auto;display:flex;align-items:center;justify-content:center;padding:0 4px}
+    #hud .logo-cell img{height:40px;max-height:40px;width:auto;display:block;object-fit:contain}
+    #hud .logo-cell img.hidden{display:none}
+
+    /* v37: Game Mode UI */
+    button#gameBtn{font-size:13px;padding:7px 12px;background:#ff3a8a;color:#fff;box-shadow:0 0 14px rgba(255,58,138,.55);font-weight:900;letter-spacing:.04em}
+    button#gameBtn.active{background:#ffd166;color:#111}
+    #gameMsg{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:50;background:rgba(0,0,0,.85);color:#fff;padding:20px 26px;border-radius:14px;border:2px solid #ff3a8a;max-width:80%;font:14px/1.4 system-ui,sans-serif;display:none;text-align:center;box-shadow:0 0 30px rgba(255,58,138,.5)}
+    #gameMsg h2{margin:0 0 8px;font-size:18px;color:#ff7ab3}
+    #gameMsg button{margin-top:14px;background:#59ffc0;color:#02110c;border:0;border-radius:6px;padding:8px 14px;font-weight:800;font-size:13px;cursor:pointer}
+    /* Bloch sphere panel — left side, used in game mode only */
+    /* v56: bloch sphere ABOVE the dashboard, left side */
+    #bloch{position:fixed;left:8px;bottom:130px;z-index:10;background:radial-gradient(circle at 30% 25%,rgba(40,60,100,.85),rgba(8,14,28,.85));padding:6px;border-radius:12px;border:1px solid rgba(150,180,255,.5);box-shadow:0 0 18px rgba(80,130,210,.4),inset 0 0 18px rgba(80,130,210,.15);display:none;font:10px system-ui,sans-serif;color:#fff;text-align:center;width:120px;box-sizing:content-box}
+    #bloch.on{display:block}
+    #bloch.lost{border-color:#ff3a3a;box-shadow:0 0 30px rgba(255,40,40,.85);animation:lostBlink .4s steps(2) infinite;background:radial-gradient(circle at 30% 25%,rgba(160,30,30,.95),rgba(40,0,0,.95))}
+    @keyframes lostBlink{0%{filter:brightness(1)}100%{filter:brightness(1.6)}}
+    #bloch svg{display:block;width:120px;height:120px}
+    #bloch .dirac{margin-top:3px;font-size:10px;font-family:'Cambria Math','Latin Modern Math',serif;line-height:1.2;width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    #bloch .dirac sup{font-size:7px;line-height:1}
+    #bloch .vc{margin-top:1px;font-size:8px;opacity:.7}
+    #bloch .lbl{font-size:8px;opacity:.7;margin-bottom:2px}
+    #vortexCount{position:fixed;left:8px;top:8px;z-index:10;background:rgba(0,0,0,.6);padding:6px 12px;border-radius:8px;color:#fff;font:bold 24px system-ui,sans-serif;display:none}
+    #vortexCount.on{display:block}
+    /* v41: SQUID-proximity warning border + vortex kill toast */
+    #squidWarn{position:fixed;inset:0;z-index:8;pointer-events:none;box-shadow:inset 0 0 0 0 rgba(255,40,80,0);transition:box-shadow .12s ease}
+    #squidWarn.warn{box-shadow:inset 0 0 30px 18px rgba(255,40,80,.85);animation:squidPulse .35s ease-in-out infinite alternate}
+    @keyframes squidPulse{0%{filter:brightness(1)}100%{filter:brightness(1.4)}}
+    #squidWarnTxt{position:fixed;top:8%;left:50%;transform:translateX(-50%);z-index:9;color:#ffd0d8;font:900 18px system-ui,sans-serif;letter-spacing:.1em;text-shadow:0 0 12px #ff3a3a;opacity:0;pointer-events:none}
+    #squidWarn.warn ~ #squidWarnTxt{opacity:1;animation:warnBlink .35s ease-in-out infinite alternate}
+    @keyframes warnBlink{0%{opacity:.6}100%{opacity:1}}
+    #killToast{position:fixed;left:50%;top:35%;transform:translate(-50%,-50%) scale(0.3);z-index:15;color:#fff;font:900 34px system-ui,sans-serif;text-shadow:0 0 22px #ffea3a,0 0 36px #ff7a3a,0 0 60px #ff3030;opacity:0;pointer-events:none;transition:opacity .45s ease-out,transform .55s cubic-bezier(.2,1.6,.4,1);white-space:nowrap}
+    #killToast.show{opacity:1;transform:translate(-50%,-50%) scale(1.1)}
+    /* v57: "too high" warning when XY-close to a vortex but Z too far */
+    #tooHighMsg{position:fixed;top:30%;left:50%;transform:translate(-50%,-50%);z-index:14;color:#ffd166;font:bold 22px system-ui,sans-serif;opacity:0;pointer-events:none;transition:opacity .25s;text-shadow:0 0 14px rgba(255,209,102,.85),0 0 24px rgba(255,100,30,.6);white-space:nowrap;letter-spacing:.04em}
+    #tooHighMsg.show{opacity:1}
+    #welcome{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.86);display:flex;align-items:center;justify-content:center;font:14px system-ui,sans-serif;color:#fff;padding:18px}
+    #welcome .box{background:rgba(20,30,50,.95);border:2px solid #59ffc0;border-radius:14px;padding:18px 22px;max-width:480px;text-align:center;box-shadow:0 0 28px rgba(89,255,192,.4)}
+    #welcome h2{margin:0 0 6px;color:#59ffc0}
+    #welcome .row{display:flex;gap:18px;justify-content:center;margin:14px 0;align-items:center}
+    #welcome .opt{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;max-width:140px}
+    #welcome .opt svg{width:38px;height:38px}
+    #welcome button{margin-top:6px;background:#59ffc0;color:#02110c;border:0;border-radius:6px;padding:8px 18px;font-weight:800;font-size:14px;cursor:pointer}
+    /* v49: hand-drawn "try game mode" hint pointing to the GAME MODE button */
+    .hand-hint{position:fixed;z-index:20;pointer-events:none;width:150px;text-align:right;opacity:0;transition:opacity .5s;left:-9999px;top:-9999px}
+    .hand-hint.on{opacity:1;animation:hintBob 1s ease-in-out infinite alternate}
+    @keyframes hintBob{from{transform:translateX(0)}to{transform:translateX(-8px)}}
+    .hand-hint span{font:700 22px 'Caveat',cursive;display:block;line-height:1;white-space:nowrap;text-align:right}
+    .hand-hint svg{display:block;width:150px;height:46px;margin-top:-2px}
+    #gameHint{color:#ff7ab3;text-shadow:0 0 12px rgba(255,58,138,.6)}
+    #speedHint{color:#ffd166;text-shadow:0 0 12px rgba(255,209,102,.6)}
+    /* START button blink animation */
+    button#startBtn.blink{animation:startBlink .35s ease-in-out infinite alternate}
+    @keyframes startBlink{from{transform:scale(1);box-shadow:0 0 7px rgba(89,255,192,.25)}to{transform:scale(1.35);box-shadow:0 0 22px rgba(89,255,192,.95)}}
+    /* v39: force landscape — overlay covers screen if phone is in portrait. */
+    #rotateOverlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(8,18,30,.96);color:#fff;align-items:center;justify-content:center;flex-direction:column;gap:14px;font:14px system-ui,sans-serif;text-align:center;padding:24px}
+    @media (orientation:portrait) and (max-width:1100px){ #rotateOverlay{display:flex} }
+    #rotateOverlay .icon{width:50px;height:90px;border:3px solid #59ffc0;border-radius:8px;box-shadow:0 0 16px rgba(89,255,192,.45);animation:rotPrompt 1.8s ease-in-out infinite}
+    @keyframes rotPrompt{0%{transform:rotate(0)} 50%,100%{transform:rotate(90deg)}}
+
+    #status{position:fixed;right:8px;top:8px;z-index:10;background:rgba(0,0,0,.62);padding:8px 10px;border-radius:8px;font-size:11px;transition:opacity .7s ease}
+    #status.hidden{opacity:0;pointer-events:none}
+    /* v23: real aircraft attitude indicator (ADI) — sky/ground ball, pitch ladder, fixed bird */
+    #center{position:fixed;left:50%;bottom:6vh;top:auto;width:120px;height:120px;margin-left:-60px;margin-top:0;z-index:9;pointer-events:none;filter:drop-shadow(0 0 4px rgba(0,0,0,.6))}
+    #center svg [stroke]:not([opacity]){opacity:.75}
+    #center .lost{filter:none}
+    #center svg{display:block;width:100%;height:100%;overflow:hidden}
+    canvas{display:block}
+  </style>
+</head>
+<body>
+  <div id="welcome">
+    <div class="box">
+      <h2>Photon Flight over Basil 3.0</h2>
+      <div>Fly over Qarakal Quantum's superconducting qubit chip.</div>
+      <div class="row">
+        <div class="opt">
+          <svg viewBox="0 0 60 40" fill="none" stroke="#59ffc0" stroke-width="2.5" stroke-linecap="round">
+            <line x1="6" y1="20" x2="54" y2="20" stroke-width="1" opacity=".35"/>
+            <line x1="6" y1="20" x2="14" y2="20" stroke-width="1.5"/>
+            <line x1="46" y1="20" x2="54" y2="20" stroke-width="1.5"/>
+            <g>
+              <circle cx="30" cy="20" r="6" fill="#59ffc0"/>
+              <line x1="30" y1="12" x2="30" y2="6"/>
+              <animateTransform attributeName="transform" type="translate" values="-16 0; 16 0; -16 0" dur="1.8s" repeatCount="indefinite"/>
+            </g>
+          </svg>
+          <div><b>Touch &amp; drag</b><br/>swipe to choose your<br/>look &amp; flight direction</div>
+        </div>
+        <div style="opacity:.5">OR</div>
+        <div class="opt">
+          <svg viewBox="0 0 40 40" fill="none" stroke="#ffe16b" stroke-width="2.5" stroke-linejoin="round"><rect x="12" y="6" width="16" height="28" rx="2"/><circle cx="20" cy="30" r="1" fill="#ffe16b"/><path d="M 30 20 Q 36 14 32 8" stroke="#ffe16b" stroke-width="1.5"/><polygon points="32,8 35,11 29,11" fill="#ffe16b" stroke="none"/></svg>
+          <div><b>Phone motion</b><br/>tilt the phone to steer</div>
+        </div>
+      </div>
+      <button id="welcomeBtn">ENTER</button>
+    </div>
+  </div>
+  <div id="ui">
+    <div class="ui-row">
+      <button id="startBtn">START</button>
+    </div>
+    <div class="ui-row">
+      <button class="boost" id="slowerBtn">◀ SLOWER</button>
+      <button class="boost" id="fasterBtn">FASTER ▶</button>
+    </div>
+    <div id="speedReadout" style="font:bold 10px system-ui;color:#ff7a3d;text-align:right;padding-right:2px">100 µm/s</div>
+    <button id="gameBtn">GAME MODE</button>
+    <button class="dark" id="cbBtn">3D / CARDBOARD</button>
+    <div class="ui-row">
+      <button class="dark" id="resetBtn">RESET</button>
+      <button class="dark" id="fullBtn">FULL SCREEN</button>
+    </div>
+    <button class="secondary" id="motionBtn">ENABLE PHONE MOTION</button>
+  </div>
+  <div id="status">Loading real GDS texture...</div>
+  <!-- v49: hand-drawn pointer hint to GAME MODE — JS positions it next to the button -->
+  <!-- v52: hand-drawn hints. Arrow tip is at the very right edge of the SVG so it
+       lands flush against the button when the hint is right-anchored next to it. -->
+  <div id="gameHint" class="hand-hint">
+    <span>try Game Mode!</span>
+    <svg viewBox="0 0 150 46" fill="none" stroke="#ff7ab3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 6 23 C 30 12, 70 8, 140 21"/>
+      <polyline points="126,12 146,22 126,32"/>
+    </svg>
+  </div>
+  <div id="speedHint" class="hand-hint">
+    <span>control speed</span>
+    <svg viewBox="0 0 150 46" fill="none" stroke="#ffd166" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 6 23 C 30 12, 70 8, 140 21"/>
+      <polyline points="126,12 146,22 126,32"/>
+    </svg>
+  </div>
+
+  <!-- v27: HUD restacked — instrument row on top, Qarakal logo below. -->
+  <!-- v56: dashboard: left column has [speed|alt] clocks above the (bigger) Qarakal logo;
+       right column is the (bigger) map. -->
+  <div id="hud">
+    <div class="left-col">
+      <div class="row">
+        <div class="cell">
+          <div class="lbl">speed</div>
+          <div class="val" id="speedValue">—</div>
+          <div class="unit">µm/s</div>
+          <div class="gauge"><div class="arc"></div><div id="needle" class="needle"></div></div>
+        </div>
+        <div class="cell">
+          <div class="lbl">altitude</div>
+          <div class="val" id="altValue">—</div>
+          <div class="unit">µm</div>
+          <div class="gauge"><div class="arc"></div><div id="altNeedle" class="needle altNeedle"></div></div>
+        </div>
+      </div>
+      <div class="cell logo-cell">
+        <img id="logo" src="qarakal-logo.svg" alt="Qarakal" onerror="this.classList.add('hidden')" />
+      </div>
+    </div>
+    <div class="cell map-cell">
+      <div class="lbl">map</div>
+      <canvas id="miniMap" width="120" height="120"></canvas>
+    </div>
+  </div>
+
+  <!-- v37: game-mode panels -->
+  <div id="vortexCount">VORTICES: <span id="vc">5</span> / <span id="vcMax">5</span></div>
+  <div id="bloch">
+    <div class="lbl">QUBIT STATE</div>
+    <svg viewBox="-60 -60 120 120">
+      <defs>
+        <radialGradient id="blochFill" cx="35%" cy="30%" r="75%">
+          <stop offset="0%"  stop-color="#5a7ec0" stop-opacity="0.65"/>
+          <stop offset="55%" stop-color="#1e2a44" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="#0c1322" stop-opacity="0.9"/>
+        </radialGradient>
+        <radialGradient id="blochHL" cx="32%" cy="22%" r="35%">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+        </radialGradient>
+        <filter id="blochGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="1.4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <!-- sphere body -->
+      <circle cx="0" cy="0" r="50" fill="url(#blochFill)" stroke="#6da3e0" stroke-width="1.1"/>
+      <circle cx="0" cy="0" r="50" fill="url(#blochHL)"/>
+      <!-- equator and meridians -->
+      <ellipse cx="0" cy="0" rx="50" ry="14" fill="none" stroke="#7aa6d6" stroke-width="0.7" stroke-dasharray="2 2" opacity="0.65"/>
+      <ellipse cx="0" cy="0" rx="14" ry="50" fill="none" stroke="#7aa6d6" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.4"/>
+      <!-- axes -->
+      <line x1="0" y1="-58" x2="0" y2="58" stroke="#9bc2ff" stroke-width="0.6" opacity="0.55"/>
+      <line x1="-56" y1="0" x2="56" y2="0" stroke="#9bc2ff" stroke-width="0.6" opacity="0.55"/>
+      <!-- |0> and |1> labels -->
+      <text x="0" y="-52" fill="#aed4ff" font-size="9" text-anchor="middle" font-family="serif" font-style="italic" filter="url(#blochGlow)">|0⟩</text>
+      <text x="0" y="60"  fill="#ffaecf" font-size="9" text-anchor="middle" font-family="serif" font-style="italic" filter="url(#blochGlow)">|1⟩</text>
+      <!-- state vector — JS animates this -->
+      <line id="blochVec" x1="0" y1="0" x2="0" y2="-50" stroke="#ffd166" stroke-width="2.6" stroke-linecap="round" filter="url(#blochGlow)"/>
+      <circle id="blochTip" cx="0" cy="-50" r="3.4" fill="#ffd166" filter="url(#blochGlow)"/>
+      <circle cx="0" cy="0" r="1.6" fill="#ffd166"/>
+    </svg>
+    <div class="dirac" id="blochDirac">|ψ⟩ = |+⟩</div>
+    <div class="vc" id="blochCoh">coherence: 100%</div>
+  </div>
+  <div id="gameMsg"></div>
+  <div id="squidWarn"></div>
+  <div id="squidWarnTxt">⚠ SQUID PROXIMITY ⚠</div>
+  <div id="killToast">+1  ★  VORTEX KILLED!</div>
+  <!-- 3D-branch live calibration panel (top centre, only when cardboard is on) -->
+  <div id="cbCalib" style="position:fixed;top:4px;left:50%;transform:translateX(-50%);z-index:30;background:rgba(0,0,0,.7);padding:5px 12px;border-radius:8px;color:#fff;font:11px system-ui,sans-serif;display:none;gap:14px;align-items:center;border:1px solid rgba(255,255,255,.18)">
+    <label>eyeSep <input id="cIPD" type="range" min="0.05" max="20" step="0.05" value="3" style="width:120px;vertical-align:middle"/> <span id="cIPDv">3.00mm</span></label>
+    <label>focus <input id="cFOC" type="range" min="0.5" max="20" step="0.1" value="3" style="width:80px;vertical-align:middle"/> <span id="cFOCv">3.0</span></label>
+    <label>FOV <input id="cFOV" type="range" min="60" max="110" step="1" value="88" style="width:70px;vertical-align:middle"/> <span id="cFOVv">88°</span></label>
+  </div>
+  <div id="tooHighMsg">↓ TOO HIGH — DESCEND TO REACH IT ↓</div>
+  <div id="center">
+    <svg viewBox="-50 -50 100 100" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <clipPath id="adiClip"><circle cx="0" cy="0" r="42"/></clipPath>
+        <linearGradient id="skyGrad" x1="0" y1="-1" x2="0" y2="0"><stop offset="0%" stop-color="#0d4a8a"/><stop offset="100%" stop-color="#5fa8e8"/></linearGradient>
+        <linearGradient id="grdGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8c5a26"/><stop offset="100%" stop-color="#3a2310"/></linearGradient>
+      </defs>
+      <g clip-path="url(#adiClip)"><g id="adiPitch">
+        <rect x="-120" y="-200" width="240" height="200" fill="url(#skyGrad)" opacity="0.1"/>
+        <rect x="-120" y="0" width="240" height="200" fill="url(#grdGrad)" opacity="0.1"/>
+        <line x1="-70" y1="0" x2="70" y2="0" stroke="#fff" stroke-width="1.2"/>
+        <g stroke="#fff" stroke-width="0.55" fill="#fff" font-family="system-ui" font-size="3.5" text-anchor="middle">
+          <line x1="-9" y1="-7" x2="9" y2="-7"/><line x1="-13" y1="-14" x2="13" y2="-14"/><text x="-17" y="-12.5">10</text><text x="17" y="-12.5">10</text>
+          <line x1="-9" y1="-21" x2="9" y2="-21"/><line x1="-13" y1="-28" x2="13" y2="-28"/><text x="-17" y="-26.5">20</text><text x="17" y="-26.5">20</text>
+          <line x1="-9" y1="7" x2="9" y2="7"/><line x1="-13" y1="14" x2="13" y2="14"/><text x="-17" y="15.5">10</text><text x="17" y="15.5">10</text>
+          <line x1="-9" y1="21" x2="9" y2="21"/><line x1="-13" y1="28" x2="13" y2="28"/><text x="-17" y="29.5">20</text><text x="17" y="29.5">20</text>
+        </g>
+      </g></g>
+      <circle cx="0" cy="0" r="42" fill="none" stroke="#0a0d12" stroke-width="3"/>
+      <circle cx="0" cy="0" r="42" fill="none" stroke="#2a3340" stroke-width="1"/>
+      <g stroke="#ffe700" stroke-width="2" fill="none" stroke-linecap="round">
+        <line x1="-26" y1="0" x2="-10" y2="0"/><line x1="-10" y1="0" x2="-7" y2="4"/>
+        <line x1="26" y1="0" x2="10" y2="0"/><line x1="10" y1="0" x2="7" y2="4"/>
+      </g>
+      <circle cx="0" cy="0" r="1.6" fill="#ffe700"/>
+      <polygon points="0,-44 -3,-39 3,-39" fill="#ffe700"/>
+    </svg>
+  </div>
+  <div id="rotateOverlay"><div class="icon"></div><div style="font-size:16px;font-weight:800">ROTATE TO LANDSCAPE</div><div style="font-size:12px;opacity:.78;max-width:280px">This app is designed for landscape orientation.</div></div>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
+  <script src="chip-data.js"></script>
+  <script>
+  (()=>{
+    const status=document.getElementById('status'), hud=document.getElementById('hud'),
+          speedValue=document.getElementById('speedValue'), needle=document.getElementById('needle'),
+          altValue=document.getElementById('altValue'), altNeedle=document.getElementById('altNeedle');
+    let running=false, motion=false;
+    // v42: explicit speed level — user steps up/down. Removes the old altitude-scaled v.
+    const SPEEDS = [50, 100, 200, 400, 700, 1000]; // µm/s
+    let speedLevel = 1;
+    let yaw=0, pitch=-0.42, targetYaw=0, targetPitch=-0.42, lastT=performance.now();
+    let initialOri=null, currentOri=null;
+    const data=window.CHIP_DATA || {bbox:[0,0,10000,10000],layers:{}};
+    const bbox=data.bbox || [0,0,10000,10000];
+    const chipUm={w:bbox[2]-bbox[0], h:bbox[3]-bbox[1]};
+    const UM_PER_UNIT=1000;
+    const chipW=chipUm.w/UM_PER_UNIT, chipH=chipUm.h/UM_PER_UNIT;
+    // v26: Nb thickness back to 1 µm visual. (Real Nb is 200 nm but the photon needs
+    // enough vertical slack to drop into the etched openings cleanly.)
+    const NB_THICKNESS_UM=1;
+    const maxZ=5000, minZ=0; // v40: hard cap altitude at 5 mm
+    const state={x:chipUm.w/2, y:chipUm.h/2, z:2200};
+
+    // v23: stereo eye separation — tuned WAY down + dynamic TOE-IN convergence.
+    // v22 used fixed-parallel cameras with a 220 µm IPD. That produced large disparity
+    // for far-away objects, which is why high altitude looked "double" — the brain couldn't
+    // fuse the two views. Now the cameras toe in so they converge on whatever the photon
+    // is actually looking at, and the IPD is small. Result: zero disparity on the object of
+    // interest at any altitude, clean stereo fusion.
+    const IPD_UM = 70;
+    // v27: allow convergence as close as 20 µm — without this, focusing on a feature
+    // a few microns away was clamped to 500 µm convergence and the brain couldn't fuse.
+    const CONV_MIN_UNIT = 0.02;
+    const CONV_MAX_UNIT = 12.0;
+    const CONV_DEFAULT_UNIT = 3.0;
+    // v27: cap the per-eye angular disparity so close-up never exceeds what the eye can
+    // converge. 1.5° = 0.026 rad. Effective eye-separation shrinks proportionally when the
+    // photon is close to its target — same trick a microscope user's brain does.
+    const MAX_DISPARITY_RAD = 0.026;
+
+    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0c1622);
+    // v26: near plane pushed from 0.5 µm out to 10 µm. The old 0.0005 covered a
+    // 160 000:1 depth range, which left the buffer with almost no precision in the chip
+    // mid-distances — that's the textbook cause of "thin features flicker far away,
+    // resolve up close." 10 µm is still well below our photon scale (~5 µm) so we don't
+    // visibly clip.
+    const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.01, 80);
+    camera.up.set(0,0,1);
+    // v26: logarithmic depth buffer — distributes z precision LOGARITHMICALLY across the
+    // near→far range instead of front-loading it near the camera. With layers stacked at
+    // 1.2 / 1.55 / 1.95 µm above Nb, this is what stops them from z-fighting each other
+    // and the painted texture overlay above.
+    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance',logarithmicDepthBuffer:true});
+    // v24: lower pixel-ratio cap (1.75) to ease GPU load and cut the per-pixel flicker
+    // we were seeing on dense polygons. Cardboard further drops to 1.25 in renderStereo.
+    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.75)); renderer.setSize(innerWidth,innerHeight); document.body.appendChild(renderer.domElement);
+    // v22: a touch more light. Nb is now significantly brighter (see material below), so
+    // we keep ambient moderate so the dark Si still reads as dark.
+    // v55: remove the directional "sun" hotspot. Hemisphere light alone — flat, even.
+    scene.add(new THREE.HemisphereLight(0xffffff,0x556677,2.6));
+    scene.add(new THREE.AmbientLight(0xb0c4dd, 0.28));
+    const siThicknessUnit=500/UM_PER_UNIT;
+    const baseGeo=new THREE.BoxGeometry(chipW,chipH,siThicknessUnit);
+    // Silicon stays dark — almost matte black — so the bright Nb really pops next to it.
+    const baseMat=new THREE.MeshStandardMaterial({color:0x121417,roughness:.95,metalness:.01});
+    const base=new THREE.Mesh(baseGeo,baseMat); base.position.set(0,0,-siThicknessUnit/2); scene.add(base);
+
+    // ---- v26: decimation reverted to a pass-through (full xy resolution restored).
+    // The "long lines that flicker at distance" turned out to be the 3-px polygon STROKES
+    // painted into the canvas overlay (see makeTexture below) plus z-fighting between
+    // closely-stacked layers — not the polygon vertex count. Hook kept here in case we
+    // want to dial it back in for very low-end devices.
+    function decimatePoly(p){ return p; }
+    // Replace each layer's polygon list in-place with the halved version so EVERY
+    // downstream consumer (trench cutout, 3D extrusion, minimap, collision) sees the
+    // simplified geometry.
+    const _LAYERS_TO_DECIMATE = ['131','134','136','137','146','147'];
+    for (const lid of _LAYERS_TO_DECIMATE){
+      const polys = data.layers[lid];
+      if (!polys) continue;
+      data.layers[lid] = polys.map(decimatePoly);
+    }
+
+    // ---- v13: real 3D Nb layer with etched holes (layer 134). Photon can't pass through it.
+    function nbMapPt(p){ return [(p[0]-bbox[0]-chipUm.w/2)/UM_PER_UNIT, (p[1]-bbox[1]-chipUm.h/2)/UM_PER_UNIT]; }
+    const chipShape = new THREE.Shape();
+    chipShape.moveTo(-chipW/2, -chipH/2);
+    chipShape.lineTo( chipW/2, -chipH/2);
+    chipShape.lineTo( chipW/2,  chipH/2);
+    chipShape.lineTo(-chipW/2,  chipH/2);
+    chipShape.closePath();
+    const trench134 = (data.layers['134']||[]).filter(p=>p && p.length>=3);
+    for (const p of trench134){
+      const hole = new THREE.Path();
+      const a = nbMapPt(p[0]); hole.moveTo(a[0], a[1]);
+      for (let i=1;i<p.length;i++){ const m=nbMapPt(p[i]); hole.lineTo(m[0], m[1]); }
+      hole.closePath();
+      chipShape.holes.push(hole);
+    }
+    const nbHeight = NB_THICKNESS_UM/UM_PER_UNIT;
+    let nbMesh=null;
+    // v22: MUCH brighter Nb so it stands out against the dark Si — critical for cardboard
+    // where the lens darkens and softens everything. Lower metalness keeps it luminous
+    // instead of reading as a dark mirror.
+    const NB_COLOR = 0xf2f5fa;
+    const NB_METAL = 0.55;
+    const NB_ROUGH = 0.35;
+    try {
+      const nbGeo = new THREE.ExtrudeGeometry(chipShape, {depth: nbHeight, bevelEnabled:false, curveSegments:1});
+      const nbMat = new THREE.MeshStandardMaterial({color:NB_COLOR, metalness:NB_METAL, roughness:NB_ROUGH});
+      nbMesh = new THREE.Mesh(nbGeo, nbMat);
+      scene.add(nbMesh);
+    } catch(e){
+      console.warn('Nb extrusion failed, falling back to flat film:', e);
+      const flat = new THREE.Mesh(new THREE.BoxGeometry(chipW, chipH, nbHeight), new THREE.MeshStandardMaterial({color:NB_COLOR, metalness:NB_METAL, roughness:NB_ROUGH}));
+      flat.position.z = nbHeight/2;
+      scene.add(flat);
+    }
+
+    function makeTexture(){
+      const S=4096, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d'); // v43: was 12288 (600MB), now 4096 (67MB) — mobile-friendly
+      // v13: transparent background — the 3D Nb extrusion is the visual base.
+      // Don't paint layer 134 (it's real geometry now); paint other layers as ID overlays.
+      g.clearRect(0,0,S,S);
+      function map(pt){ return [(pt[0]-bbox[0])/chipUm.w*S, S-(pt[1]-bbox[1])/chipUm.h*S]; }
+      const styles={
+        '136':'rgba(248,250,252,.85)',
+        '137':'rgba(215,226,238,.80)',
+        '131':'rgba(255,150,250,.95)'
+      };
+      // v15: 146/147 are 3D meshes now, no longer painted on the texture.
+      // v26: NO MORE STROKES. The 3-px outlines around every painted polygon were the
+      // long bright lines that flickered at distance — at chip distance, a 3-px stroke on
+      // a 12288-px canvas is sub-pixel, so it aliased into long shimmering streaks every
+      // frame. Filled-only now, with crisp edges from the polygon fill itself.
+      const order=['131','136','137'];
+      for(const layer of order){
+        const polys=data.layers[layer]||[];
+        g.fillStyle=styles[layer]||'rgba(255,255,255,.6)';
+        for(const p of polys){
+          if(!p||p.length<3) continue;
+          g.beginPath();
+          const a=map(p[0]); g.moveTo(a[0],a[1]);
+          for(let i=1;i<p.length;i++){ const m=map(p[i]); g.lineTo(m[0],m[1]); }
+          g.closePath();
+          g.fill();
+        }
+      }
+      const tex=new THREE.CanvasTexture(c);
+      // v26: max-out anisotropic filtering — keeps thin GDS features (CPW gaps, junction
+      // leads) crisp at oblique viewing angles instead of moiré-ing.
+      const maxA = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1;
+      tex.anisotropy = maxA;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.generateMipmaps = true;
+      tex.needsUpdate=true; return tex;
+    }
+    // v26: polygonOffset pushes this textured plane SLIGHTLY toward the camera at
+    // render-time, so it stops z-fighting with the Nb extrusion underneath. Combined with
+    // logarithmicDepthBuffer this kills the painted-texture shimmer at altitude.
+    const topMat=new THREE.MeshBasicMaterial({
+      map:makeTexture(), side:THREE.DoubleSide,
+      transparent:true, depthWrite:false,
+      polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2
+    });
+    const top=new THREE.Mesh(new THREE.PlaneGeometry(chipW,chipH),topMat);
+    top.position.z = nbHeight + 0.002; // bigger gap above the Nb top, with polygonOffset on top of that
+    scene.add(top);
+    const edge=new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({color:0x88aaff,transparent:true,opacity:.35})); edge.position.copy(base.position); scene.add(edge);
+
+    // ---- v13: 3D meshes for the qubit pads, junction leads, and Josephson junctions.
+    const detailGroup = new THREE.Group(); scene.add(detailGroup);
+    function shapeFromPoly(p){
+      const s = new THREE.Shape();
+      s.moveTo((p[0][0]-bbox[0]-chipUm.w/2)/UM_PER_UNIT, (p[0][1]-bbox[1]-chipUm.h/2)/UM_PER_UNIT);
+      for (let i=1;i<p.length;i++){
+        s.lineTo((p[i][0]-bbox[0]-chipUm.w/2)/UM_PER_UNIT, (p[i][1]-bbox[1]-chipUm.h/2)/UM_PER_UNIT);
+      }
+      return s;
+    }
+    function addLayerMeshes(layerId, color, emissive, emissiveIntensity, thickUm, baseZUm, opts){
+      opts = opts || {};
+      const polys = data.layers[layerId] || [];
+      const tUnit = Math.max(thickUm/UM_PER_UNIT, 0.0001);
+      const baseZ = baseZUm/UM_PER_UNIT;
+      const matCfg = {
+        color, emissive, emissiveIntensity,
+        roughness: opts.roughness != null ? opts.roughness : 0.32,
+        metalness: opts.metalness != null ? opts.metalness : 0.85
+      };
+      if (opts.opacity != null && opts.opacity < 1.0){
+        matCfg.transparent = true;
+        matCfg.opacity = opts.opacity;
+        matCfg.depthWrite = false;
+      }
+      const mat = new THREE.MeshStandardMaterial(matCfg);
+      for (const p of polys){
+        if (!p || p.length<3) continue;
+        try {
+          const geo = new THREE.ExtrudeGeometry(shapeFromPoly(p), {depth: tUnit, bevelEnabled:false, curveSegments:2});
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.z = baseZ;
+          detailGroup.add(mesh);
+        } catch(e){}
+      }
+    }
+    // v26: layer thicknesses restored, BUT z-offsets pushed apart so we have a clearer
+    // "altitude budget" between layers and the depth buffer can resolve each one cleanly.
+    // (Old offsets +0.05 / +0.20 / +0.34 were too tight for a depth buffer covering 0.01
+    // to 80 world units — adjacent layers shimmered against each other.)
+    addLayerMeshes('136', 0xffe8b8, 0x402200, 0.35, 0.13, NB_THICKNESS_UM + 0.20);
+    addLayerMeshes('137', 0xffd070, 0x553200, 0.55, 0.13, NB_THICKNESS_UM + 0.55);
+    addLayerMeshes('131', 0xff66ee, 0xff44cc, 1.5, 0.08, NB_THICKNESS_UM + 0.95, {roughness:0.2, metalness:0.4});
+
+    // ---- v15: bandaid crossover dielectric (layer 146)
+    const D146_THICK = 1.5 * NB_THICKNESS_UM;
+    addLayerMeshes('146', 0x9be3ff, 0x224a66, 0.35, D146_THICK, NB_THICKNESS_UM, {roughness:0.45, metalness:0.05, opacity:0.55});
+    const D147_THICK = 2.0 * NB_THICKNESS_UM;
+    addLayerMeshes('147', 0xeef4ff, 0x3a4a66, 0.20, D147_THICK, NB_THICKNESS_UM + D146_THICK, {roughness:0.3, metalness:0.85, opacity:0.92});
+
+    // ---- blue/orange glow halos around the 8 lumped-element resonators
+    const qubitCenters = [
+      [6136, 4975],   [3814, 4975],
+      [5925, 5762.5], [4025, 5762.5],
+      [4975, 6266],   [4025, 3862.5],
+      [4975, 3684],   [5925, 3862.5]
+    ];
+    const haloGroup = new THREE.Group(); scene.add(haloGroup);
+    const halos = [];
+    function makeHaloTex(isBlue){
+      const cv = document.createElement('canvas'); cv.width=cv.height=512;
+      const cg = cv.getContext('2d');
+      const grd = cg.createRadialGradient(256,256,6,256,256,256);
+      if (isBlue){
+        grd.addColorStop(0,    'rgba(190,225,255,1.0)');
+        grd.addColorStop(0.18, 'rgba(70,170,255,0.85)');
+        grd.addColorStop(0.50, 'rgba(40,130,255,0.30)');
+        grd.addColorStop(1.00, 'rgba(20,90,200,0)');
+      } else {
+        grd.addColorStop(0,    'rgba(255,235,180,1.0)');
+        grd.addColorStop(0.18, 'rgba(255,165,40,0.85)');
+        grd.addColorStop(0.50, 'rgba(255,110,20,0.30)');
+        grd.addColorStop(1.00, 'rgba(180,60,0,0)');
+      }
+      cg.fillStyle = grd; cg.fillRect(0,0,512,512);
+      return new THREE.CanvasTexture(cv);
+    }
+    qubitCenters.forEach(([cx,cy], i)=>{
+      const isBlue = (i % 2 === 0);
+      const tex = makeHaloTex(isBlue);
+      const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false, blending: THREE.AdditiveBlending});
+      const sizeUm = 820;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeUm/UM_PER_UNIT, sizeUm/UM_PER_UNIT), mat);
+      mesh.position.set((cx-chipUm.w/2)/UM_PER_UNIT, (cy-chipUm.h/2)/UM_PER_UNIT, nbHeight + 0.001);
+      mesh.userData = {phase: i*0.785, isBlue};
+      haloGroup.add(mesh); halos.push(mesh);
+    });
+
+    // ---- one green sinusoidal glow per SQUID
+    function makeGreenTex(){
+      const cv = document.createElement('canvas'); cv.width=cv.height=256;
+      const cg = cv.getContext('2d');
+      const grd = cg.createRadialGradient(128,128,2,128,128,124);
+      grd.addColorStop(0,    'rgba(225,255,205,1.0)');
+      grd.addColorStop(0.18, 'rgba(90,255,130,0.9)');
+      grd.addColorStop(0.50, 'rgba(40,210,90,0.4)');
+      grd.addColorStop(1.00, 'rgba(0,80,30,0)');
+      cg.fillStyle = grd; cg.fillRect(0,0,256,256);
+      return new THREE.CanvasTexture(cv);
+    }
+    const greenTex = makeGreenTex();
+    const idcGroup = new THREE.Group(); scene.add(idcGroup);
+    const idcPulses = [];
+    qubitCenters.forEach(([cx,cy])=>{
+      const sizeUm = 220;
+      const mat = new THREE.MeshBasicMaterial({map: greenTex, transparent:true, depthWrite:false, blending: THREE.AdditiveBlending});
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeUm/UM_PER_UNIT, sizeUm/UM_PER_UNIT), mat);
+      mesh.position.set((cx-chipUm.w/2)/UM_PER_UNIT, (cy-chipUm.h/2)/UM_PER_UNIT, nbHeight + 0.0008);
+      mesh.userData = {base: sizeUm/UM_PER_UNIT};
+      idcGroup.add(mesh); idcPulses.push(mesh);
+    });
+
+    // ---- floor logic (Nb height except inside etched openings)
+    function polyBounds(poly){ let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity; for(const q of poly){ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); } return {minx,miny,maxx,maxy,w:maxx-minx,h:maxy-miny}; }
+    const trenchPolys=trench134.map(poly=>({poly,b:polyBounds(poly)}));
+    function pointInPoly(x,y,poly){ let inside=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const xi=poly[i][0]-bbox[0], yi=poly[i][1]-bbox[1], xj=poly[j][0]-bbox[0], yj=poly[j][1]-bbox[1]; const hit=((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi+1e-9)+xi); if(hit) inside=!inside; } return inside; }
+    function isInTrench(x,y){ for(const t of trenchPolys){ const b=t.b; if(x+bbox[0]>=b.minx && x+bbox[0]<=b.maxx && y+bbox[1]>=b.miny && y+bbox[1]<=b.maxy && pointInPoly(x,y,t.poly)) return true; } return false; }
+    function floorZAt(x,y){ return 75; } // v44: invisible glass floor at 75 µm — can never get closer
+    status.textContent='v22: brighter Nb, lift-on-level, stereo IPD, cardboard mini-map HUD.'; setTimeout(()=>status.classList.add('hidden'),5500);
+
+    // ---- Minimap: cache the static chip layout once, then redraw player dot each frame.
+    // Used by the main HUD canvas and by both cardboard-eye HUD canvases.
+    const miniBg = document.createElement('canvas'); miniBg.width = miniBg.height = 120;
+    (function drawMiniBg(){
+      const g = miniBg.getContext('2d');
+      g.clearRect(0,0,120,120);
+      // v52: high-contrast minimap
+      // bright Nb sheet fill
+      g.fillStyle = '#d8e2ee';
+      g.fillRect(0,0,120,120);
+      // crisp border
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1.5;
+      g.strokeRect(0.5, 0.5, 119, 119);
+      // etched openings = dark Si
+      g.fillStyle = 'rgba(20,28,40,0.95)';
+      for (const p of trench134){
+        if (!p || p.length<3) continue;
+        g.beginPath();
+        for (let i=0;i<p.length;i++){
+          const x = (p[i][0]-bbox[0])/chipUm.w * 120;
+          const y = 120 - (p[i][1]-bbox[1])/chipUm.h * 120;
+          if (i===0) g.moveTo(x,y); else g.lineTo(x,y);
+        }
+        g.closePath(); g.fill();
+      }
+      // qubit centers — bigger, glowing blue dots
+      for (const [cx,cy] of qubitCenters){
+        const x = cx/chipUm.w * 120;
+        const y = 120 - cy/chipUm.h * 120;
+        g.fillStyle = '#1e88ff';
+        g.beginPath(); g.arc(x,y,2.4,0,Math.PI*2); g.fill();
+        g.strokeStyle = '#ffffff'; g.lineWidth = 0.6;
+        g.beginPath(); g.arc(x,y,2.4,0,Math.PI*2); g.stroke();
+      }
+    })();
+    const miniMainCanvas = document.getElementById('miniMap');
+    const cbMapCanvases = Array.from(document.querySelectorAll('.cb-map'));
+    function paintMini(target){
+      const g = target.getContext('2d');
+      const W = target.width, H = target.height;
+      g.imageSmoothingEnabled = true;
+      g.drawImage(miniBg, 0, 0, W, H);
+      // v51: active flux vortices = pulsing red rings on the minimap
+      if (game && game.active){
+        const t = performance.now()/1000;
+        const pulse = 0.5 + 0.5*Math.sin(t*3);
+        for (const vv of game.vortices){
+          if (!vv.alive) continue;
+          const vx = (vv.x/chipUm.w) * W;
+          const vy = H - (vv.y/chipUm.h) * H;
+          g.fillStyle = 'rgba(255,80,80,'+(0.55+0.35*pulse)+')';
+          g.beginPath(); g.arc(vx, vy, 3.4+pulse, 0, Math.PI*2); g.fill();
+          g.strokeStyle = 'rgba(255,200,200,0.9)'; g.lineWidth = 0.8;
+          g.beginPath(); g.arc(vx, vy, 3.4+pulse, 0, Math.PI*2); g.stroke();
+        }
+      }
+      // player position
+      const px = (state.x/chipUm.w) * W;
+      const py = H - (state.y/chipUm.h) * H;
+      const fx = Math.sin(yaw), fy = Math.cos(yaw);
+      const ax = px + fx * 7, ay = py - fy * 7;
+      g.strokeStyle = '#ff00aa'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(px, py); g.lineTo(ax, ay); g.stroke();
+      g.fillStyle = '#ff00aa';
+      g.beginPath(); g.arc(px, py, 3, 0, Math.PI*2); g.fill();
+      g.strokeStyle = '#ffffff'; g.lineWidth = 1;
+      g.beginPath(); g.arc(px, py, 3, 0, Math.PI*2); g.stroke();
+    }
+    function paintAllMinis(){
+      paintMini(miniMainCanvas);
+      for (const c of cbMapCanvases) paintMini(c);
+    }
+
+    // ===== 3D-branch: Cardboard SBS stereo (experimental) =====
+    // Uses THREE.StereoCamera with parallel cameras + off-axis (asymmetric) projection.
+    // Live tunables: eyeSep, focus, FOV — exposed in the top-centre calib bar.
+    let cardboard = false;
+    const stereoCam = new THREE.StereoCamera();
+    const cbCfg = { eyeSep: 3.0, focus: 3.0, fov: 88 };  // world unit = 1 mm
+    stereoCam.eyeSep = cbCfg.eyeSep;
+    function renderStereo(){
+      const halfW = Math.floor(innerWidth/2), h = innerHeight;
+      // pass FULL window aspect — StereoCamera halves it internally
+      camera.aspect = innerWidth/h;
+      const prevFov = camera.fov, prevFocus = camera.focus;
+      camera.fov   = cbCfg.fov;
+      camera.focus = cbCfg.focus;
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld(true);
+      stereoCam.eyeSep = cbCfg.eyeSep;
+      stereoCam.update(camera);
+      renderer.setScissorTest(true);
+      renderer.setViewport(0, 0, halfW, h);
+      renderer.setScissor (0, 0, halfW, h);
+      renderer.render(scene, stereoCam.cameraL);
+      renderer.setViewport(halfW, 0, innerWidth-halfW, h);
+      renderer.setScissor (halfW, 0, innerWidth-halfW, h);
+      renderer.render(scene, stereoCam.cameraR);
+      renderer.setScissorTest(false);
+      camera.fov = prevFov; camera.focus = prevFocus;
+    }
+
+    function lookDirection(){
+      return new THREE.Vector3(
+        Math.sin(yaw)*Math.cos(pitch),
+        Math.cos(yaw)*Math.cos(pitch),
+        Math.sin(pitch)
+      ).normalize();
+    }
+    function updateCamera(){
+      // wrap yaw delta the short way around
+      let dy = targetYaw - yaw;
+      while (dy >  Math.PI) dy -= 2*Math.PI;
+      while (dy < -Math.PI) dy += 2*Math.PI;
+      yaw += dy * 0.08;
+      pitch += (targetPitch-pitch)*0.08; pitch=Math.max(-1.40,Math.min(1.40,pitch));
+      const wx=(state.x-chipUm.w/2)/UM_PER_UNIT, wy=(state.y-chipUm.h/2)/UM_PER_UNIT, wz=state.z/UM_PER_UNIT;
+      camera.position.set(wx,wy,wz);
+      const d=lookDirection();
+      camera.lookAt(camera.position.x+d.x, camera.position.y+d.y, camera.position.z+d.z);
+    }
+    function forward(){ return lookDirection(); }
+
+    // proximity-driven vibration around SQUIDs
+    let lastVibrate = 0;
+    function pulseVibrate(t){
+      if (!navigator.vibrate) return;
+      if (!game.active || !running) return; // v55: vibrate only during active game in play
+      let minD = Infinity;
+      for (const [cx,cy] of qubitCenters){
+        const dx = state.x - cx, dy = state.y - cy;
+        const dxy = Math.sqrt(dx*dx + dy*dy);
+        const d3 = Math.sqrt(dxy*dxy + state.z*state.z);
+        if (d3 < minD) minD = d3;
+      }
+      const RANGE = 400; // v45: tighter
+      if (minD > RANGE) return;
+      const f = 1 - (minD / RANGE);
+      const interval = 420 - 365 * f;
+      const duration = 14 + 61 * f;
+      if (t - lastVibrate > interval){
+        try { navigator.vibrate(duration); } catch(e){}
+        lastVibrate = t;
+      }
+    }
+
+    // v23: stronger aircraft-with-flaps LIFT. At pitch=0 (looking at horizon) the photon
+    // climbs hard — you'd need a noticeable nose-down attitude (~-30°) to maintain altitude,
+    // or push the nose down further to actually dive.
+    const LIFT_FACTOR = 0.0; // v42: no lift — pure look-direction movement, user has direct speed control
+
+    // v28: depth-probe stereo. Cast a ray from the camera in the look direction every
+    // frame and use the FIRST geometry hit as the convergence distance. That way the eyes
+    // converge on whatever the photon is actually staring at — chip surface, a SQUID pad,
+    // a dielectric crossover, anything — instead of always trying to converge on z=0.
+    // Smoothed with a low-pass so the disparity doesn't jitter when the ray skims edges.
+    const stereoRaycaster = new THREE.Raycaster();
+    stereoRaycaster.far = CONV_MAX_UNIT + 1;
+    let smoothConvDist = CONV_DEFAULT_UNIT;
+    function probeConvergence(){
+      // v30: cheap plane intercept only — raycasting the full GDS every frame was
+      // crashing the phone. Convergence = where the look ray hits the chip top (z=0),
+      // clamped, smoothed.
+      const dir = lookDirection();
+      let raw = CONV_DEFAULT_UNIT;
+      if (dir.z < -0.03){
+        const tHit = -camera.position.z / dir.z;
+        if (tHit > 0) raw = tHit;
+      }
+      raw = Math.max(CONV_MIN_UNIT, Math.min(CONV_MAX_UNIT, raw));
+      smoothConvDist += (raw - smoothConvDist) * 0.18;
+      return smoothConvDist;
+    }
+
+    // (legacy v29 stereo block removed — replaced by the 3D-branch renderStereo above)
+
+    function step(t){ requestAnimationFrame(step); const dt=Math.min(.05,(t-lastT)/1000); lastT=t;
+      if(motion && currentOri && initialOri){
+        let da=(currentOri.alpha-initialOri.alpha)*Math.PI/180;
+        if(da>Math.PI)da-=2*Math.PI; if(da<-Math.PI)da+=2*Math.PI;
+        targetYaw=-da;
+        let db=(currentOri.beta -initialOri.beta )*Math.PI/180;
+        if(db>Math.PI)db-=2*Math.PI; if(db<-Math.PI)db+=2*Math.PI;
+        let dg=(currentOri.gamma-initialOri.gamma)*Math.PI/180;
+        if(dg> Math.PI/2)dg-=Math.PI; if(dg<-Math.PI/2)dg+=Math.PI;
+        const orientationDeg = (typeof window.orientation === 'number')
+          ? window.orientation
+          : ((screen.orientation && screen.orientation.angle) || 0);
+        const o = orientationDeg * Math.PI/180;
+        const tilt = db*Math.cos(o) - dg*Math.sin(o);
+        targetPitch = tilt - .42;
+        targetPitch = Math.max(-1.40, Math.min(1.40, targetPitch));
+      }
+      updateCamera();
+      if(running){
+        // v47: simple movement — no wall-snap (caused "expelled" feeling when nose-down
+        // hit the floor). Just integrate position then clamp to box. Glass floor still at 75 µm.
+        const v = SPEEDS[speedLevel];
+        const f=forward();
+        state.x += f.x*v*dt;
+        state.y += f.y*v*dt;
+        state.z += (f.z + LIFT_FACTOR)*v*dt;
+        state.x=Math.max(0,Math.min(chipUm.w,state.x));
+        state.y=Math.max(0,Math.min(chipUm.h,state.y));
+        state.z=Math.max(75,Math.min(maxZ,state.z));
+      }
+      pulseVibrate(t);
+      const v=SPEEDS[speedLevel];
+      speedValue.textContent=(running?v:0).toFixed(1); // v55: true airspeed — 0 when paused/before start
+      const maxSpeed=1000;
+      const angle=-82+164*Math.max(0,Math.min(1,v/maxSpeed));
+      needle.style.transform=`rotate(${angle}deg)`;
+      const altFrac = Math.max(0, Math.min(1, state.z / maxZ));
+      altValue.textContent = state.z.toFixed(0);
+      altNeedle.style.transform = `rotate(${-82 + 164*altFrac}deg)`;
+
+      // mirror values into the cardboard HUDs
+      const vStr = v.toFixed(1), aStr = state.z.toFixed(0);
+      for (const el of document.querySelectorAll('.cbSpeed')) el.textContent = vStr;
+      for (const el of document.querySelectorAll('.cbAlt'))   el.textContent = aStr;
+
+      // mini-maps (main + both cardboard halves) and ADI (main + both cardboard halves)
+      paintAllMinis();
+      updateADI();
+
+      const tt=t/1000;
+      for (const h of halos){
+        const breath = 0.55 + 0.45*Math.sin(tt*2.4 + h.userData.phase);
+        h.material.opacity = 0.55 + 0.45*breath;
+        const s = 1 + 0.10*breath;
+        h.scale.set(s, s, 1);
+      }
+      const squidPulse = 0.5 + 0.5*Math.sin(tt*1.6);
+      for (const p of idcPulses){
+        p.material.opacity = 0.10 + 0.90*squidPulse;
+        const s = 0.55 + 0.55*squidPulse;
+        p.scale.set(s, s, 1);
+      }
+      gameStep(dt);
+      if (cardboard){
+        renderStereo();
+      } else {
+        camera.aspect=innerWidth/innerHeight;
+        camera.fov = 70;
+        camera.updateProjectionMatrix();
+        renderer.setViewport(0,0,innerWidth,innerHeight);
+        renderer.render(scene,camera);
+      }
+    }
+    requestAnimationFrame(step);
+
+    const adiPitchEl = document.getElementById('adiPitch');
+    function updateADI(){ if (adiPitchEl) adiPitchEl.setAttribute('transform','translate(0 '+(pitch*50).toFixed(2)+')'); }
+
+    // ===================================================================================
+    // v37: GAME MODE — eliminate 5 flux vortices near SQUIDs before the qubit state decays.
+    // Pass over a vortex at z<200 µm to eliminate it. Avoid getting within 100 µm of a SQUID.
+    // ===================================================================================
+    const game = { active:false, theta:Math.PI/2, phi:0, vortices:[], won:false, lost:false, lostReason:'', startT:0, count:5 };
+    const vortexGroup = new THREE.Group(); scene.add(vortexGroup);
+    const blochEl = document.getElementById('bloch');
+    const blochVec = document.getElementById('blochVec');
+    const blochTip = document.getElementById('blochTip');
+    const blochDirac = document.getElementById('blochDirac');
+    const blochCoh = document.getElementById('blochCoh');
+    const vortexCountEl = document.getElementById('vortexCount');
+    const vcSpan = document.getElementById('vc');
+    const gameMsg = document.getElementById('gameMsg');
+
+    function buildVortexMesh(){
+      // Red spiral, drawn into a canvas texture, on a flat plane that we point upward
+      const cv = document.createElement('canvas'); cv.width=cv.height=256;
+      const cg = cv.getContext('2d');
+      // radial red glow background
+      const grd = cg.createRadialGradient(128,128,4,128,128,128);
+      grd.addColorStop(0,'rgba(255,255,200,1)');
+      grd.addColorStop(0.10,'rgba(255,80,80,0.95)');
+      grd.addColorStop(0.45,'rgba(255,30,30,0.55)');
+      grd.addColorStop(1,'rgba(120,0,0,0)');
+      cg.fillStyle=grd; cg.fillRect(0,0,256,256);
+      // spiral arms
+      cg.strokeStyle='rgba(255,230,230,0.92)'; cg.lineWidth=4;
+      for (let arm=0; arm<3; arm++){
+        cg.beginPath();
+        for (let t=0; t<6.28*1.5; t+=0.04){
+          const r = 8 + t*11;
+          const a = t + arm*(6.28/3);
+          const x = 128 + Math.cos(a)*r;
+          const y = 128 + Math.sin(a)*r;
+          if (t===0) cg.moveTo(x,y); else cg.lineTo(x,y);
+        }
+        cg.stroke();
+      }
+      const tex = new THREE.CanvasTexture(cv);
+      const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending});
+      const sizeUm = 380;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(sizeUm/UM_PER_UNIT, sizeUm/UM_PER_UNIT), mat);
+      // point light for "radiating red"
+      const light = new THREE.PointLight(0xff3030, 3, 2.0, 2);
+      mesh.add(light);
+      return mesh;
+    }
+
+    function spawnVortices(){
+      // clear any prior
+      while (vortexGroup.children.length) vortexGroup.remove(vortexGroup.children[0]);
+      game.vortices = [];
+      // v57: spawn vortices with a safety check — reject any spawn within 500 µm of ANY
+      // SQUID so the player is never forced to risk a death-radius approach.
+      const N = game.count;
+      const MIN_FROM_SQUID = 500;
+      function clearOfSquids(vx, vy){
+        for (const [qx,qy] of qubitCenters){
+          if (Math.hypot(vx-qx, vy-qy) < MIN_FROM_SQUID) return false;
+        }
+        return true;
+      }
+      for (let i=0;i<N;i++){
+        let vx, vy, ok=false;
+        for (let attempt=0; attempt<25 && !ok; attempt++){
+          const qi = Math.floor(Math.random()*qubitCenters.length);
+          const [cx,cy] = qubitCenters[qi];
+          const ang = Math.random()*Math.PI*2;
+          const r = MIN_FROM_SQUID + Math.random()*1200; // 500–1700 µm from chosen SQUID
+          vx = cx + Math.cos(ang)*r;
+          vy = cy + Math.sin(ang)*r;
+          // keep on chip
+          if (vx<300 || vx>chipUm.w-300 || vy<300 || vy>chipUm.h-300) continue;
+          if (clearOfSquids(vx, vy)) ok = true;
+        }
+        if (!ok){
+          // ultra-fallback: place at chip centre, clearOfSquids almost always true there
+          vx = chipUm.w/2; vy = chipUm.h/2;
+        }
+        const cx=vx, cy=vy; // keep variable names below working
+        void cx; void cy;
+        const mesh = buildVortexMesh();
+        mesh.position.set((vx-chipUm.w/2)/UM_PER_UNIT,(vy-chipUm.h/2)/UM_PER_UNIT, (NB_THICKNESS_UM+8)/UM_PER_UNIT);
+        mesh.userData.spinPhase = i*0.7;
+        vortexGroup.add(mesh);
+        game.vortices.push({x:vx,y:vy,mesh,alive:true});
+      }
+    }
+
+    function diracStr(theta, phi){
+      // v55: round c to 2 dec then derive s from the normalization constraint
+      // so displayed amplitudes always satisfy c²+s²=1 to 2-decimal precision.
+      const t = Math.max(0, Math.min(Math.PI, theta));
+      let c = Math.cos(t/2), s = Math.sin(t/2);
+      const norm = Math.sqrt(c*c + s*s) || 1;
+      c /= norm; s /= norm;
+      const cR = Math.round(c*100)/100;
+      const sR = Math.round(Math.sqrt(Math.max(0, 1 - cR*cR))*100)/100;
+      c = cR; s = sR;
+      const fmt = (n)=> (Math.abs(n)<0.005)?'0':n.toFixed(2);
+      const phase = ((phi%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
+      const xPi = phase/Math.PI; // 0..2
+      let phaseStr;
+      if (xPi < 0.02 || xPi > 1.98) phaseStr='';
+      else if (Math.abs(xPi-1) < 0.02) phaseStr='−';
+      else phaseStr = 'e<sup>'+xPi.toFixed(2)+'πi</sup>·';
+      if (Math.abs(s)<0.005) return '|ψ⟩=|0⟩';
+      if (Math.abs(c)<0.005) return '|ψ⟩='+phaseStr+'|1⟩';
+      return '|ψ⟩='+fmt(c)+'|0⟩+'+phaseStr+fmt(s)+'|1⟩';
+    }
+
+    function updateBloch(t, dt){
+      if (!game.active) return;
+      if (!running) return; // v40: PAUSE freezes decay
+      // spin phi fast, drift theta slowly toward 0
+      game.phi += dt * 2.4;
+      game.theta -= dt * (Math.PI/2 / 60); // v50: ~60 s decay (30% longer than v49)
+      if (game.theta < 0) game.theta = 0;
+      // project the vector onto our 2D bloch view (z up = |0⟩, x = real Bloch x)
+      const sinT = Math.sin(game.theta), cosT = Math.cos(game.theta);
+      const X = sinT * Math.cos(game.phi);
+      // we display in a 2D circle: x maps to screen-x, z maps to -screen-y (|0⟩ at top)
+      const sx = X * 50;
+      const sy = -cosT * 50;
+      blochVec.setAttribute('x2', sx.toFixed(1));
+      blochVec.setAttribute('y2', sy.toFixed(1));
+      blochTip.setAttribute('cx', sx.toFixed(1));
+      blochTip.setAttribute('cy', sy.toFixed(1));
+      blochDirac.innerHTML = diracStr(game.theta, game.phi);
+      // coherence = how far the state still is from |0⟩; sin(θ) is the "magnitude of |1⟩" part
+      const coh = Math.round(sinT*100);
+      blochCoh.textContent = 'coherence: '+coh+'%';
+      // lose: state decayed
+      if (game.theta < 0.04) endGame(false, 'Your quantum state decohered to |0⟩.');
+    }
+
+    function endGame(won, reason){
+      if (!game.active) return;
+      game.active=false; game.won=won; game.lost=!won; game.lostReason=reason||'';
+      // v50: stop movement on both win and lose
+      running=false; startBtn.textContent='START';
+      if (!won){
+        // on loss → snap state to |0⟩, redden the bloch sphere
+        game.theta = 0; blochEl.classList.add('lost');
+        blochVec.setAttribute('x2','0'); blochVec.setAttribute('y2','-50');
+        blochTip.setAttribute('cx','0'); blochTip.setAttribute('cy','-50');
+        blochDirac.innerHTML='|ψ⟩=|0⟩'; blochCoh.textContent='coherence: 0%';
+      }
+      const title = won ? 'VICTORY' : 'GAME OVER';
+      const colour = won ? '#59ffc0' : '#ff5577';
+      const harderBtn = '';
+      const score = won ? Math.round(Math.sin(game.theta)*100) : 0;
+      const scoreHtml = won ? '<div style="margin-top:8px;font:bold 22px system-ui;color:#ffd166">SCORE: '+score+'% coherence</div>' : '';
+      gameMsg.innerHTML='<h2 style="color:'+colour+'">'+title+'</h2>'
+        +'<div>'+(won?'All '+game.count+' flux vortices eliminated.':reason)+'</div>'+scoreHtml
+        +'<div style="margin-top:8px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">'
+        +'<button id="gameMsgRetry">TRY AGAIN</button>'+harderBtn
+        +'<button id="gameMsgClose" style="background:#dde8ff;color:#06101f">EXIT</button>'
+        +'</div>';
+      gameMsg.style.display='block';
+      function restart(){
+        gameMsg.style.display='none';
+        blochEl.classList.remove('lost');
+        document.getElementById('squidWarn').classList.remove('warn'); // v51: clear stale warning
+        running=true; startBtn.textContent='PAUSE';
+        while(vortexGroup.children.length)vortexGroup.remove(vortexGroup.children[0]);
+        // also teleport away from any SQUID we were sitting on
+        state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200;
+        targetYaw=yaw=0; targetPitch=pitch=-0.42;
+        spawnVortices();
+        game.active=true; game.won=false; game.lost=false;
+        game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
+        gameBtn.textContent='OBSERVER MODE';
+        // teleport home, but don't reset difficulty
+        state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200;
+        targetYaw=yaw=0; targetPitch=pitch=-0.42;
+        vcSpan.textContent=game.count; document.getElementById('vcMax').textContent=game.count;
+        blochEl.classList.add('on'); vortexCountEl.classList.add('on');
+      }
+      document.getElementById('gameMsgClose').onclick=()=>{
+        gameMsg.style.display='none';
+        blochEl.classList.remove('on','lost');
+        vortexCountEl.classList.remove('on');
+        while(vortexGroup.children.length)vortexGroup.remove(vortexGroup.children[0]);
+        document.getElementById('squidWarn').classList.remove('warn'); // v51: clear stuck warning
+        gameBtn.textContent='GAME MODE';
+      };
+      document.getElementById('gameMsgRetry').onclick=restart;
+      const hb=document.getElementById('gameMsgHarder');
+    }
+
+    function gameStep(dt){
+      // spin all live vortices
+      const tt = performance.now()/1000;
+      for (const v of game.vortices){
+        if (!v.alive) continue;
+        v.mesh.rotation.z = tt*3.0 + v.mesh.userData.spinPhase;
+        const breath = 0.85 + 0.30*Math.sin(tt*2.8 + v.mesh.userData.spinPhase);
+        v.mesh.scale.set(breath,breath,1);
+      }
+      if (!game.active) return;
+      updateBloch(tt, dt);
+      // collisions — passing OVER vortex at z<=200 µm = kill it. Passing within 100 µm of SQUID = lose.
+      let tooHigh = false;
+      for (const v of game.vortices){
+        if (!v.alive) continue;
+        const dxy = Math.hypot(state.x - v.x, state.y - v.y);
+        const d3  = Math.hypot(dxy, state.z);
+        if (d3 < 300){
+          v.alive = false;
+          dropPinningHole(v);
+          if (navigator.vibrate) try{ navigator.vibrate([20,30,80]); }catch(e){}
+          const left = game.vortices.filter(g=>g.alive).length;
+          vcSpan.textContent = left;
+          if (left===0) endGame(true);
+        } else if (dxy < 250 && state.z > 200){
+          // v57: XY-close but too high to make the 300 µm 3D ball
+          tooHigh = true;
+        }
+      }
+      const tooHighEl = document.getElementById('tooHighMsg');
+      if (tooHigh) tooHighEl.classList.add('show'); else tooHighEl.classList.remove('show');
+      // SQUID proximity: warn at <250 µm (3D), die at <100 µm
+      let minSquid = Infinity;
+      for (const [cx,cy] of qubitCenters){
+        const d3 = Math.hypot(state.x-cx, state.y-cy, state.z);
+        if (d3 < minSquid) minSquid = d3;
+      }
+      const warn = document.getElementById('squidWarn');
+      if (minSquid < 450){ warn.classList.add('warn'); } else { warn.classList.remove('warn'); }
+      if (minSquid < 100){ warn.classList.remove('warn'); endGame(false, 'Too close to a SQUID — quantum state lost.'); return; }
+      // v46: warn near chip edge, fall off = lose
+      const PAD = 50;
+      const edge = Math.min(state.x, chipUm.w-state.x, state.y, chipUm.h-state.y);
+      if (edge < 600 && edge >= PAD){ warn.classList.add('warn'); }
+      if (state.x < PAD || state.x > chipUm.w-PAD || state.y < PAD || state.y > chipUm.h-PAD){
+        endGame(false, 'You flew off the chip — coherence lost in vacuum.'); return;
+      }
+    }
+
+    // v51: tiny dim-green texture used for the "pinned" hole left behind after a vortex kill
+    function buildPinnedDotTex(){
+      const cv = document.createElement('canvas'); cv.width=cv.height=128;
+      const cg = cv.getContext('2d');
+      const grd = cg.createRadialGradient(64,64,1,64,64,40);
+      grd.addColorStop(0,'rgba(220,255,210,0.9)');
+      grd.addColorStop(0.4,'rgba(60,200,90,0.55)');
+      grd.addColorStop(1,'rgba(0,60,20,0)');
+      cg.fillStyle=grd; cg.fillRect(0,0,128,128);
+      return new THREE.CanvasTexture(cv);
+    }
+
+    // v48: drop a small black "pinning hole" from in front of the photon onto the vortex,
+    // then leave behind a tiny red glowing dot where the big vortex used to be.
+    function dropPinningHole(v){
+      // black box starts roughly 200 µm in front of and below the photon
+      const f = lookDirection();
+      const sx = (state.x + f.x*200 - chipUm.w/2)/UM_PER_UNIT;
+      const sy = (state.y + f.y*200 - chipUm.h/2)/UM_PER_UNIT;
+      const sz = Math.max(0.1, (state.z - 60)/UM_PER_UNIT);
+      const ex = (v.x - chipUm.w/2)/UM_PER_UNIT;
+      const ey = (v.y - chipUm.h/2)/UM_PER_UNIT;
+      const ez = (NB_THICKNESS_UM + 1)/UM_PER_UNIT;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.08,0.08,0.08), new THREE.MeshBasicMaterial({color:0x000000}));
+      box.position.set(sx,sy,sz);
+      scene.add(box);
+      const t0 = performance.now();
+      const DUR = 450;
+      function anim(){
+        const a = Math.min(1,(performance.now()-t0)/DUR);
+        box.position.set(sx+(ex-sx)*a, sy+(ey-sy)*a, sz+(ez-sz)*a - 0.5*Math.sin(a*Math.PI)*0.3);
+        box.rotation.x += 0.3; box.rotation.y += 0.4;
+        if (a<1) requestAnimationFrame(anim);
+        else {
+          scene.remove(box);
+          spawnKillBurst(v.x, v.y);
+          // v51: vortex becomes a small, dim GREEN dot (pinned hole)
+          v.mesh.material.dispose();
+          if (v.mesh.material.map) v.mesh.material.map.dispose();
+          v.mesh.material = new THREE.MeshBasicMaterial({
+            map: buildPinnedDotTex(),
+            transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0.55
+          });
+          v.mesh.scale.set(0.18,0.18,1);
+          // remove the bright red point light too
+          for (let i=v.mesh.children.length-1;i>=0;i--) v.mesh.remove(v.mesh.children[i]);
+        }
+      }
+      anim();
+    }
+
+    // burst of red particles when a vortex dies
+    function spawnKillBurst(ux, uy){
+      const toast = document.getElementById('killToast');
+      toast.classList.add('show');
+      setTimeout(()=>toast.classList.remove('show'), 1200);
+      const cv = document.createElement('canvas'); cv.width=cv.height=128;
+      const cg = cv.getContext('2d');
+      const grd = cg.createRadialGradient(64,64,2,64,64,64);
+      grd.addColorStop(0,'rgba(255,255,200,1)');
+      grd.addColorStop(0.35,'rgba(255,80,40,0.9)');
+      grd.addColorStop(1,'rgba(255,20,20,0)');
+      cg.fillStyle=grd; cg.fillRect(0,0,128,128);
+      const tex = new THREE.CanvasTexture(cv);
+      const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending});
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4), mat);
+      m.position.set((ux-chipUm.w/2)/UM_PER_UNIT, (uy-chipUm.h/2)/UM_PER_UNIT, (NB_THICKNESS_UM+12)/UM_PER_UNIT);
+      scene.add(m);
+      const t0 = performance.now();
+      function anim(){
+        const dt = (performance.now()-t0)/700;
+        if (dt>=1){ scene.remove(m); mat.dispose(); tex.dispose(); return; }
+        const s = 0.6 + dt*5;
+        m.scale.set(s,s,1);
+        m.material.opacity = 1-dt;
+        requestAnimationFrame(anim);
+      }
+      anim();
+    }
+
+    function startGame(){
+      // explain rules
+      gameMsg.innerHTML='<h2>GAME MODE</h2>'
+        +'<div style="font-size:11px;opacity:.85;margin-bottom:6px">You are flying over the real CAD of <b>Qarakal Quantum&rsquo;s Basil 3.0</b> device.</div>'
+        +'<div style="text-align:left;line-height:1.5">'
+        +'• Eliminate '+game.count+' <span style="color:#ff5252">red flux vortices</span> by flying near them — a pinning hole is deployed automatically.<br/>'
+        +'• Stay <b>&gt; 100 µm</b> away from SQUIDs.<br/>'
+        +'• Don&rsquo;t fall off the chip.<br/>'
+        +'• Your qubit state decays toward |0⟩ — be quick.'
+        +'</div><button id="gameMsgStart">BEGIN</button>';
+      gameMsg.style.display='block';
+      // v50: freeze movement while the rules popup is open
+      running=false; startBtn.textContent='START';
+      document.getElementById('gameMsgStart').onclick=()=>{
+        gameMsg.style.display='none';
+        blochEl.classList.remove('lost');
+        spawnVortices();
+        game.active=true; game.won=false; game.lost=false;
+        game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
+        blochEl.classList.add('on'); vortexCountEl.classList.add('on');
+        vcSpan.textContent=game.count; document.getElementById('vcMax').textContent=game.count;
+        running=true; startBtn.textContent='PAUSE'; cancelStartBlink();
+        showHint('speedHint','slowerBtn',3000);
+      };
+    }
+
+    let dragging=false,lastX=0,lastY=0;
+    renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
+    addEventListener('pointerup',()=>dragging=false);
+    addEventListener('pointermove',e=>{ if(!dragging||motion) return; targetYaw-=(e.clientX-lastX)*0.005; targetPitch-=(e.clientY-lastY)*0.005; lastX=e.clientX; lastY=e.clientY; });
+    addEventListener('deviceorientation',e=>{ currentOri={alpha:e.alpha||0,beta:e.beta||0,gamma:e.gamma||0}; }, true);
+    const startBtn=document.getElementById('startBtn');
+    const slowerBtn=document.getElementById('slowerBtn');
+    const fasterBtn=document.getElementById('fasterBtn');
+    const speedReadout=document.getElementById('speedReadout');
+    function refreshSpeed(){ speedReadout.textContent = SPEEDS[speedLevel]+' µm/s'; }
+    const gameBtn=document.getElementById('gameBtn');
+    const motionBtn=document.getElementById('motionBtn');
+    function refreshUiVisibility(){}
+    // v56: wake lock — keep screen at full brightness while phone motion is enabled
+    let wakeLock = null;
+    async function acquireWakeLock(){
+      try{ if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+    }
+    async function releaseWakeLock(){
+      if (wakeLock){ try{ await wakeLock.release(); } catch(e){} wakeLock=null; }
+    }
+    document.addEventListener('visibilitychange', ()=>{
+      if (document.visibilityState==='visible' && motion && !wakeLock) acquireWakeLock();
+    });
+    async function enablePhoneMotion(showStatus){
+      try{
+        if(typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){
+          const r=await DeviceOrientationEvent.requestPermission();
+          if(r!=='granted') return false;
+        }
+        motion=true; motionBtn.textContent='DISABLE PHONE MOTION';
+        initialOri=currentOri||{alpha:0,beta:0,gamma:0};
+        acquireWakeLock();
+        return true;
+      }catch(err){ return false; }
+    }
+    function disablePhoneMotion(){ motion=false; motionBtn.textContent='ENABLE PHONE MOTION'; releaseWakeLock(); }
+    function doReset(){
+      state.x=chipUm.w/2; state.y=chipUm.h/2; state.z=2200;
+      targetYaw=yaw=0; targetPitch=pitch=-0.42;
+      initialOri=currentOri;
+      game.count=5;
+      blochEl.classList.remove('lost');
+      document.getElementById('squidWarn').classList.remove('warn');
+      // v57: full game reset if active — respawn original 5 vortices, reset coherence
+      if (game.active){
+        while(vortexGroup.children.length) vortexGroup.remove(vortexGroup.children[0]);
+        spawnVortices();
+        game.theta=Math.PI/2; game.phi=0; game.startT=performance.now();
+        vcSpan.textContent=game.count;
+        document.getElementById('vcMax').textContent=game.count;
+      }
+      if (navigator.vibrate) try{ navigator.vibrate(30);}catch(e){}
+    }
+    async function tryLockLandscape(){
+      try{
+        if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+        if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+      }catch(e){}
+    }
+    // v54: simpler robust positioning. Re-measure on every frame for the first 200 ms
+    // and adjust — this catches the case where layout settles late after the welcome
+    // panel disappears. Hint is left-anchored.
+    function showHint(hintId, btnId, durMs){
+      const hint = document.getElementById(hintId);
+      const btn  = document.getElementById(btnId);
+      if (!hint||!btn) return;
+      hint.classList.add('on');
+      let frames = 0;
+      function place(){
+        const r = btn.getBoundingClientRect();
+        if (r.width > 0){
+          hint.style.left  = Math.max(2, r.left - 152) + 'px';
+          hint.style.right = 'auto';
+          hint.style.top   = (r.top + r.height/2 - 36) + 'px';        }
+        if (frames++ < 12) requestAnimationFrame(place);
+      }
+      place();
+      setTimeout(()=>hint.classList.remove('on'), durMs);
+    }
+    // v55: START blinks until the user first taps it (no 10-s cutoff)
+    let startBlinkTimer=null, hasEverStarted=false;
+    function armStartBlink(){
+      clearTimeout(startBlinkTimer);
+      if (hasEverStarted) return;
+      startBtn.classList.remove('blink');
+      startBlinkTimer = setTimeout(()=>{
+        if (!hasEverStarted) startBtn.classList.add('blink');
+      }, 4000);
+    }
+    function cancelStartBlink(){
+      clearTimeout(startBlinkTimer);
+      startBtn.classList.remove('blink');
+    }
+    startBtn.onclick=()=>{ tryLockLandscape(); hasEverStarted=true; cancelStartBlink(); running=!running; startBtn.textContent=running?'PAUSE':'START'; };
+    slowerBtn.onclick=()=>{ if(speedLevel>0)speedLevel--; refreshSpeed(); };
+    fasterBtn.onclick=()=>{ if(speedLevel<SPEEDS.length-1)speedLevel++; refreshSpeed(); };
+    refreshSpeed();
+    gameBtn.onclick=()=>{
+      tryLockLandscape();
+      document.getElementById('gameHint').classList.remove('on');
+      if (game.active){
+        game.active=false;
+        while(vortexGroup.children.length) vortexGroup.remove(vortexGroup.children[0]);
+        game.vortices = [];
+        blochEl.classList.remove('on','lost');
+        vortexCountEl.classList.remove('on');
+        document.getElementById('squidWarn').classList.remove('warn');
+        gameMsg.style.display='none';
+        gameBtn.textContent='GAME MODE';
+      } else {
+        startGame();
+        gameBtn.textContent='OBSERVER MODE';
+      }
+    };
+    document.getElementById('welcomeBtn').onclick=()=>{
+      document.getElementById('welcome').style.display='none';
+      showHint('gameHint','gameBtn',4500);
+      armStartBlink();
+    };
+    document.getElementById('resetBtn').onclick=()=>{ doReset(); };
+    document.getElementById('fullBtn').onclick=async()=>{ try{ if(!document.fullscreenElement){ await document.documentElement.requestFullscreen(); } else { await document.exitFullscreen(); } }catch(err){} };
+    motionBtn.onclick=async()=>{ if(motion){ disablePhoneMotion(); } else { await enablePhoneMotion(true); } };
+    addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);});
+    refreshUiVisibility();
+  })();
+  </script>
+</body>
+</html>
